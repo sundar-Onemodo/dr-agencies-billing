@@ -20,13 +20,29 @@ export default function ReportsScreen() {
   const { bills } = useBilling();
   const [activeFilter, setActiveFilter] = useState<FilterType>('monthly'); // Default monthly to show mock data
 
-  // Helper to parse DD-MM-YYYY string to Date object
+  // Helper to parse date string (ISO or DD-MM-YYYY)
   const parseDateString = (dateStr: string): Date => {
+    if (!dateStr) return new Date();
+    if (dateStr.includes('T') || dateStr.match(/^\d{4}-\d{2}-\d{2}/)) {
+      return new Date(dateStr);
+    }
     const parts = dateStr.split('-');
-    const day = parseInt(parts[0], 10);
-    const month = parseInt(parts[1], 10) - 1; // 0-indexed
-    const year = parseInt(parts[2], 10);
-    return new Date(year, month, day);
+    if (parts.length === 3) {
+      const day = parseInt(parts[0], 10);
+      const month = parseInt(parts[1], 10) - 1; // 0-indexed
+      const year = parseInt(parts[2], 10);
+      return new Date(year, month, day);
+    }
+    return new Date(dateStr);
+  };
+
+  // Helper to format date for display
+  const formatDateForDisplay = (dateStr: string): string => {
+    const d = parseDateString(dateStr);
+    const dd = String(d.getDate()).padStart(2, '0');
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const yyyy = d.getFullYear();
+    return `${dd}-${mm}-${yyyy}`;
   };
 
   // Filter bills dynamically
@@ -39,21 +55,20 @@ export default function ReportsScreen() {
       billDate.setHours(0, 0, 0, 0);
 
       if (activeFilter === 'today') {
-        const dd = String(today.getDate()).padStart(2, '0');
-        const mm = String(today.getMonth() + 1).padStart(2, '0');
-        const yyyy = today.getFullYear();
-        const todayStr = `${dd}-${mm}-${yyyy}`;
-        return bill.date === todayStr;
+        return (
+          billDate.getDate() === today.getDate() &&
+          billDate.getMonth() === today.getMonth() &&
+          billDate.getFullYear() === today.getFullYear()
+        );
       }
 
       if (activeFilter === 'weekly') {
-        const diffTime = Math.abs(today.getTime() - billDate.getTime());
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-        return diffDays <= 7;
+        const sevenDaysAgo = new Date(today);
+        sevenDaysAgo.setDate(today.getDate() - 7);
+        return billDate >= sevenDaysAgo && billDate <= new Date();
       }
 
       if (activeFilter === 'monthly') {
-        // Match same month and year
         return (
           billDate.getMonth() === today.getMonth() &&
           billDate.getFullYear() === today.getFullYear()
@@ -174,7 +189,7 @@ export default function ReportsScreen() {
                   <Ionicons name="document-text" size={18} color="#D4AF37" />
                 </View>
                 <View>
-                  <Text style={styles.invoiceNo}>{item.id}</Text>
+                  <Text style={styles.invoiceNo}>{item.invoiceNumber || item.id}</Text>
                   <Text style={styles.customerName} numberOfLines={1}>
                     {item.customerName}
                   </Text>
@@ -183,7 +198,7 @@ export default function ReportsScreen() {
 
               <View style={styles.rowRight}>
                 <Text style={styles.invoiceAmt}>{formatCurrency(item.total)}</Text>
-                <Text style={styles.invoiceDate}>{item.date}</Text>
+                <Text style={styles.invoiceDate}>{formatDateForDisplay(item.date)}</Text>
               </View>
             </TouchableOpacity>
           ))

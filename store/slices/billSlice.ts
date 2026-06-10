@@ -12,6 +12,7 @@ export interface BillItem {
 
 export interface Bill {
   id: string;
+  invoiceNumber: string;
   customerName: string;
   date: string;
   items: BillItem[];

@@ -136,6 +136,7 @@ export default function CreateBillScreen() {
     }
 
     const finalBill = {
+      invoiceNumber: invoiceNo,
       customerName,
       date: billingDate,
       items,

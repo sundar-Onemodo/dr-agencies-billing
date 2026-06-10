@@ -18,19 +18,41 @@ export default function DashboardScreen() {
     }).format(value);
   };
 
-  // Get current date string (DD-MM-YYYY)
-  const getTodayDateString = () => {
-    const today = new Date();
-    const dd = String(today.getDate()).padStart(2, '0');
-    const mm = String(today.getMonth() + 1).padStart(2, '0');
-    const yyyy = today.getFullYear();
+  // Helper to parse date string (ISO or DD-MM-YYYY)
+  const parseDateString = (dateStr: string): Date => {
+    if (!dateStr) return new Date();
+    if (dateStr.includes('T') || dateStr.match(/^\d{4}-\d{2}-\d{2}/)) {
+      return new Date(dateStr);
+    }
+    const parts = dateStr.split('-');
+    if (parts.length === 3) {
+      const day = parseInt(parts[0], 10);
+      const month = parseInt(parts[1], 10) - 1;
+      const year = parseInt(parts[2], 10);
+      return new Date(year, month, day);
+    }
+    return new Date(dateStr);
+  };
+
+  // Helper to format date for display
+  const formatDateForDisplay = (dateStr: string): string => {
+    const d = parseDateString(dateStr);
+    const dd = String(d.getDate()).padStart(2, '0');
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const yyyy = d.getFullYear();
     return `${dd}-${mm}-${yyyy}`;
   };
 
-  const todayStr = getTodayDateString();
-
   // Calculate stats dynamically from context
-  const todayBills = bills.filter((b) => b.date === todayStr);
+  const today = new Date();
+  const todayBills = bills.filter((b) => {
+    const bDate = parseDateString(b.date);
+    return (
+      bDate.getDate() === today.getDate() &&
+      bDate.getMonth() === today.getMonth() &&
+      bDate.getFullYear() === today.getFullYear()
+    );
+  });
   
   // If no bills for "today" in the mock, fallback to sum of all bills for visualization, 
   // but prioritize showing actual today bills if user added one.
@@ -179,14 +201,14 @@ export default function DashboardScreen() {
                   <Ionicons name="document-text" size={20} color="#D4AF37" />
                 </View>
                 <View>
-                  <Text style={styles.billInvoiceNo}>{item.id}</Text>
+                  <Text style={styles.billInvoiceNo}>{item.invoiceNumber || item.id}</Text>
                   <Text style={styles.billCustomer}>{item.customerName}</Text>
                 </View>
               </View>
               <View style={styles.billRight}>
                 <Text style={styles.billAmount}>{formatCurrency(item.total)}</Text>
                 <View style={styles.billDateRow}>
-                  <Text style={styles.billDate}>{item.date}</Text>
+                  <Text style={styles.billDate}>{formatDateForDisplay(item.date)}</Text>
                   <Ionicons name="chevron-forward" size={14} color="#A0A0B0" style={{ marginLeft: 4 }} />
                 </View>
               </View>

@@ -63,6 +63,31 @@ export default function BillPreviewScreen() {
     }).format(val);
   };
 
+  // Helper to parse date string (ISO or DD-MM-YYYY)
+  const parseDateString = (dateStr: string): Date => {
+    if (!dateStr) return new Date();
+    if (dateStr.includes('T') || dateStr.match(/^\d{4}-\d{2}-\d{2}/)) {
+      return new Date(dateStr);
+    }
+    const parts = dateStr.split('-');
+    if (parts.length === 3) {
+      const day = parseInt(parts[0], 10);
+      const month = parseInt(parts[1], 10) - 1; // 0-indexed
+      const year = parseInt(parts[2], 10);
+      return new Date(year, month, day);
+    }
+    return new Date(dateStr);
+  };
+
+  // Helper to format date for display
+  const formatDateForDisplay = (dateStr: string): string => {
+    const d = parseDateString(dateStr);
+    const dd = String(d.getDate()).padStart(2, '0');
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const yyyy = d.getFullYear();
+    return `${dd}-${mm}-${yyyy}`;
+  };
+
   // Simulating sharing PDF/Text of the invoice
   const handleShareInvoice = async () => {
     try {
@@ -74,8 +99,8 @@ export default function BillPreviewScreen() {
 =================================
        D R AGENCIES INVOICE      
 =================================
-Invoice No: ${bill.id}
-Date: ${bill.date}
+Invoice No: ${bill.invoiceNumber || bill.id}
+Date: ${formatDateForDisplay(bill.date)}
 Customer: ${bill.customerName}
 ---------------------------------
 Items:
@@ -90,7 +115,7 @@ Thank you for doing business!
 
       await Share.share({
         message,
-        title: `Invoice ${bill.id}`,
+        title: `Invoice ${bill.invoiceNumber || bill.id}`,
       });
     } catch (error) {
       Alert.alert('Error', 'Could not share invoice');
@@ -159,8 +184,8 @@ Thank you for doing business!
       
       // 3. Print Meta Info
       await BluetoothEscposPrinter.printerAlign(BluetoothEscposPrinter.ALIGN.LEFT);
-      await BluetoothEscposPrinter.printText(`Invoice No: ${bill.id}\n`, {});
-      await BluetoothEscposPrinter.printText(`Date: ${bill.date}\n`, {});
+      await BluetoothEscposPrinter.printText(`Invoice No: ${bill.invoiceNumber || bill.id}\n`, {});
+      await BluetoothEscposPrinter.printText(`Date: ${formatDateForDisplay(bill.date)}\n`, {});
       await BluetoothEscposPrinter.printText(`Billed To: ${bill.customerName}\n`, {});
       
       await BluetoothEscposPrinter.printText(divider, {});
@@ -307,8 +332,8 @@ Thank you for doing business!
 
           {/* Invoice Meta */}
           <View style={styles.metaRow}>
-            <Text style={styles.receiptMetaText}>Invoice No: {bill.id}</Text>
-            <Text style={styles.receiptMetaText}>Date: {bill.date}</Text>
+            <Text style={styles.receiptMetaText}>Invoice No: {bill.invoiceNumber || bill.id}</Text>
+            <Text style={styles.receiptMetaText}>Date: {formatDateForDisplay(bill.date)}</Text>
           </View>
           <Text style={styles.receiptMetaText}>Billed To: {bill.customerName}</Text>
           

@@ -35,7 +35,8 @@ export interface BillItem {
 }
 
 export interface Bill {
-  id: string; // e.g. "INV-2026-0001"
+  id: string;
+  invoiceNumber: string;
   customerName: string;
   date: string;
   items: BillItem[];
@@ -131,32 +132,34 @@ export const BillingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const generateNextInvoiceNumber = (): string => {
-    if (bills.length === 0) {
-      return 'INV-2026-0001';
-    }
-    // Search max invoice ID number
-    let maxNum = 0;
+    const today = new Date();
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const dd = String(today.getDate()).padStart(2, '0');
+    const todayStr = `${yyyy}${mm}${dd}`; // e.g. "20260610"
+
+    let maxSerial = 0;
     bills.forEach((bill) => {
-      const match = bill.id.match(/INV-2026-(\d+)/);
-      if (match && match[1]) {
-        const num = parseInt(match[1], 10);
-        if (num > maxNum) {
-          maxNum = num;
+      const invNum = bill.invoiceNumber;
+      if (invNum && invNum.endsWith(todayStr)) {
+        const serialStr = invNum.substring(0, invNum.length - todayStr.length);
+        const serial = parseInt(serialStr, 10);
+        if (!isNaN(serial) && serial > maxSerial) {
+          maxSerial = serial;
         }
       }
     });
-    const nextNum = maxNum + 1;
-    return `INV-2026-${nextNum.toString().padStart(4, '0')}`;
+
+    const nextSerial = maxSerial + 1;
+    const serialPrefix = String(nextSerial).padStart(2, '0');
+    return `${serialPrefix}${todayStr}`;
   };
 
   const addBill = (newBill: Omit<Bill, 'id'>): string => {
-    // Generate the next invoice number
-    const nextInvoiceId = generateNextInvoiceNumber();
+    const nextInvoiceId = newBill.invoiceNumber || generateNextInvoiceNumber();
     
-    // Destructure date since it's not expected in the creation payload
     const { date, ...billDetails } = newBill;
 
-    // Dispatch thunk to create bill in Supabase
     dispatch(createBillThunk({
       ...billDetails,
       invoiceNumber: nextInvoiceId
