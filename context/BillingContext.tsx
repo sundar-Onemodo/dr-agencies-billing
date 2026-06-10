@@ -1,4 +1,23 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useEffect } from 'react';
+import { useAppDispatch, useAppSelector } from '../store';
+import { loginUser, logoutUser } from '../store/slices/authSlice';
+import { 
+  fetchProducts, 
+  addProduct as addProductThunk, 
+  deleteProduct as deleteProductThunk,
+  updateProductLocal
+} from '../store/slices/productSlice';
+import { 
+  fetchRecentBills, 
+  createBill as createBillThunk 
+} from '../store/slices/billSlice';
+import { 
+  fetchStoreProfile, 
+  saveStoreProfile as saveStoreProfileThunk 
+} from '../store/slices/storeSlice';
+import { 
+  updatePrinterSettings as updatePrinterSettingsAction 
+} from '../store/slices/printerSlice';
 
 export interface Product {
   id: string;
@@ -64,113 +83,44 @@ interface BillingContextType {
 
 const BillingContext = createContext<BillingContextType | undefined>(undefined);
 
-// Initial Mock Products
-const INITIAL_PRODUCTS: Product[] = [
-  { id: 'p1', name: 'Premium Copper Wire 1.5mm', price: 1250, gstRate: 18 },
-  { id: 'p2', name: 'Industrial PVC Conduit Pipe', price: 340, gstRate: 18 },
-  { id: 'p3', name: 'Brass Valve Fitting 1/2"', price: 450, gstRate: 18 },
-  { id: 'p4', name: 'LED Panel Downlight 12W', price: 280, gstRate: 12 },
-  { id: 'p5', name: 'Heavy Duty MCB Double Pole', price: 980, gstRate: 18 },
-  { id: 'p6', name: 'Modular Switch Plate 6 Module', price: 150, gstRate: 18 },
-];
-
-// Initial Mock Bills
-const INITIAL_BILLS: Bill[] = [
-  {
-    id: 'INV-2026-0001',
-    customerName: 'Karan Electricals',
-    date: '05-06-2026',
-    items: [
-      { id: '1', name: 'Premium Copper Wire 1.5mm', qty: 10, price: 1250, amount: 12500 },
-      { id: '2', name: 'Brass Valve Fitting 1/2"', qty: 5, price: 450, amount: 2250 },
-    ],
-    subtotal: 14750,
-    gstEnabled: true,
-    cgst: 1327.5,
-    sgst: 1327.5,
-    total: 17405,
-  },
-  {
-    id: 'INV-2026-0002',
-    customerName: 'Balaji Builders',
-    date: '06-06-2026',
-    items: [
-      { id: '1', name: 'Industrial PVC Conduit Pipe', qty: 25, price: 340, amount: 8500 },
-    ],
-    subtotal: 8500,
-    gstEnabled: true,
-    cgst: 765,
-    sgst: 765,
-    total: 10030,
-  },
-  {
-    id: 'INV-2026-0003',
-    customerName: 'Ramesh Sharma (Retail)',
-    date: '07-06-2026',
-    items: [
-      { id: '1', name: 'LED Panel Downlight 12W', qty: 8, price: 280, amount: 2240 },
-      { id: '2', name: 'Modular Switch Plate 6 Module', qty: 10, price: 150, amount: 1500 },
-    ],
-    subtotal: 3740,
-    gstEnabled: false,
-    cgst: 0,
-    sgst: 0,
-    total: 3740,
-  },
-];
-
-const DEFAULT_COMPANY_SETTINGS: CompanySettings = {
-  name: 'D R AGENCIES',
-  address: 'No. 45/A, Commercial Street, Next to SBI, Bangalore - 560001',
-  gstin: '29AABCD1234F1Z5',
-  phone: '+91 98765 43210',
-  email: 'contact@dragencies.com',
-  bankName: 'State Bank of India',
-  accountName: 'D R AGENCIES',
-  accountNo: '987654321098',
-  ifsc: 'SBIN0001234',
-};
-
 export const BillingProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
-  const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
-  const [bills, setBills] = useState<Bill[]>(INITIAL_BILLS);
-  const [companySettings, setCompanySettings] = useState<CompanySettings>(DEFAULT_COMPANY_SETTINGS);
-  const [printerSettings, setPrinterSettings] = useState<PrinterSettings>({
-    paperSize: '58mm',
-    connectedPrinter: null,
-    connectedPrinterAddress: null,
-  });
+  const dispatch = useAppDispatch();
+
+  // Selectors
+  const isAuthenticated = useAppSelector((state) => state.auth.isAuthenticated);
+  const products = useAppSelector((state) => state.products.items);
+  const bills = useAppSelector((state) => state.bills.items);
+  const companySettings = useAppSelector((state) => state.store.profile);
+  const printerSettings = useAppSelector((state) => state.printer);
+
+  // Fetch initial data when authenticated
+  useEffect(() => {
+    if (isAuthenticated) {
+      dispatch(fetchProducts());
+      dispatch(fetchStoreProfile());
+      dispatch(fetchRecentBills());
+    }
+  }, [isAuthenticated, dispatch]);
 
   const login = async (email: string, password: string): Promise<boolean> => {
-    // Basic simulation of a login check
-    if (email.trim() && password.length >= 4) {
-      setIsAuthenticated(true);
-      return true;
-    }
-    return false;
+    const resultAction = await dispatch(loginUser({ email, password }));
+    return loginUser.fulfilled.match(resultAction);
   };
 
   const logout = () => {
-    setIsAuthenticated(false);
+    dispatch(logoutUser());
   };
 
   const addProduct = (newProduct: Omit<Product, 'id'>) => {
-    const productWithId: Product = {
-      ...newProduct,
-      id: `p-${Date.now()}`,
-    };
-    setProducts((prev) => [productWithId, ...prev]);
+    dispatch(addProductThunk(newProduct));
   };
 
   const updateProduct = (updatedProduct: Product) => {
-    setProducts((prev) =>
-      prev.map((p) => (p.id === updatedProduct.id ? updatedProduct : p))
-    );
+    dispatch(updateProductLocal(updatedProduct));
   };
 
   const deleteProduct = (id: string) => {
-    setProducts((prev) => prev.filter((p) => p.id !== id));
+    dispatch(deleteProductThunk(id));
   };
 
   const generateNextInvoiceNumber = (): string => {
@@ -193,21 +143,27 @@ export const BillingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const addBill = (newBill: Omit<Bill, 'id'>): string => {
+    // Generate the next invoice number
     const nextInvoiceId = generateNextInvoiceNumber();
-    const finalBill: Bill = {
-      ...newBill,
-      id: nextInvoiceId,
-    };
-    setBills((prev) => [finalBill, ...prev]);
+    
+    // Destructure date since it's not expected in the creation payload
+    const { date, ...billDetails } = newBill;
+
+    // Dispatch thunk to create bill in Supabase
+    dispatch(createBillThunk({
+      ...billDetails,
+      invoiceNumber: nextInvoiceId
+    }));
+    
     return nextInvoiceId;
   };
 
   const updateCompanySettings = (settings: CompanySettings) => {
-    setCompanySettings(settings);
+    dispatch(saveStoreProfileThunk(settings));
   };
 
   const updatePrinterSettings = (settings: Partial<PrinterSettings>) => {
-    setPrinterSettings((prev) => ({ ...prev, ...settings }));
+    dispatch(updatePrinterSettingsAction(settings));
   };
 
   return (

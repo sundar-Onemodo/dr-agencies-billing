@@ -9,6 +9,9 @@ import * as SplashScreen from 'expo-splash-screen';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { BillingProvider } from '@/context/BillingContext';
 
+import { Provider as ReduxProvider } from 'react-redux';
+import { store } from '@/store';
+
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
 
@@ -40,18 +43,20 @@ export default function RootLayout() {
   }
 
   return (
-    <BillingProvider>
-      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-        <Stack screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="index" />
-          <Stack.Screen name="login" />
-          <Stack.Screen name="(tabs)" />
-          <Stack.Screen name="preview" />
-          <Stack.Screen name="+not-found" options={{ headerShown: true, title: 'Not Found' }} />
-        </Stack>
-        <StatusBar style="light" backgroundColor="#191820" />
-      </ThemeProvider>
-    </BillingProvider>
+    <ReduxProvider store={store}>
+      <BillingProvider>
+        <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+          <Stack screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="index" />
+            <Stack.Screen name="login" />
+            <Stack.Screen name="(tabs)" />
+            <Stack.Screen name="preview" />
+            <Stack.Screen name="+not-found" options={{ headerShown: true, title: 'Not Found' }} />
+          </Stack>
+          <StatusBar style="light" backgroundColor="#191820" />
+        </ThemeProvider>
+      </BillingProvider>
+    </ReduxProvider>
   );
 }
 
