@@ -60,11 +60,11 @@ export const addProduct = createAsyncThunk(
       });
       const data = await response.json();
 
-      console.log("Product added successfully", data.product);
-
       if (!response.ok) {
         return rejectWithValue(data.error || 'Failed to add product');
       }
+
+      console.log("Product added successfully", data.product);
       return data.product as Product;
     } catch (err: any) {
       return rejectWithValue(err.message || 'Server connection failed');
