@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect } from 'react';
 import { useAppDispatch, useAppSelector } from '../store';
-import { loginUser, logoutUser } from '../store/slices/authSlice';
+import { loginUser, logoutUser, initializeAuth, logoutUserThunk } from '../store/slices/authSlice';
 import { 
   fetchProducts, 
   addProduct as addProductThunk, 
@@ -66,6 +66,7 @@ export interface PrinterSettings {
 
 interface BillingContextType {
   isAuthenticated: boolean;
+  isInitialized: boolean;
   login: (email: string, password: string) => Promise<boolean>;
   logout: () => void;
   products: Product[];
@@ -88,10 +89,16 @@ export const BillingProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   // Selectors
   const isAuthenticated = useAppSelector((state) => state.auth.isAuthenticated);
+  const isInitialized = useAppSelector((state) => state.auth.isInitialized);
   const products = useAppSelector((state) => state.products.items);
   const bills = useAppSelector((state) => state.bills.items);
   const companySettings = useAppSelector((state) => state.store.profile);
   const printerSettings = useAppSelector((state) => state.printer);
+
+  // Fetch initial auth state from storage
+  useEffect(() => {
+    dispatch(initializeAuth());
+  }, [dispatch]);
 
   // Fetch initial data when authenticated
   useEffect(() => {
@@ -108,7 +115,7 @@ export const BillingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const logout = () => {
-    dispatch(logoutUser());
+    dispatch(logoutUserThunk());
   };
 
   const addProduct = (newProduct: Omit<Product, 'id'>) => {
@@ -170,6 +177,7 @@ export const BillingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     <BillingContext.Provider
       value={{
         isAuthenticated,
+        isInitialized,
         login,
         logout,
         products,

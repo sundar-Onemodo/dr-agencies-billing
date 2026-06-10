@@ -1,4 +1,5 @@
 import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from '../../constants/Api';
 
 interface User {
@@ -11,6 +12,7 @@ interface AuthState {
   token: string | null;
   user: User | null;
   isAuthenticated: boolean;
+  isInitialized: boolean;
   loading: boolean;
   error: string | null;
 }
@@ -19,6 +21,7 @@ const initialState: AuthState = {
   token: null,
   user: null,
   isAuthenticated: false,
+  isInitialized: false,
   loading: false,
   error: null,
 };
@@ -61,9 +64,45 @@ export const loginUser = createAsyncThunk(
       if (!response.ok) {
         return rejectWithValue(data.error || 'Login failed');
       }
+
+      // Persist user and token on successful login
+      await AsyncStorage.setItem('token', data.token);
+      await AsyncStorage.setItem('user', JSON.stringify(data.user));
+
       return data; // expected { token, user: { id, email, name } }
     } catch (err: any) {
       return rejectWithValue(err.message || 'Server connection failed');
+    }
+  }
+);
+
+export const initializeAuth = createAsyncThunk(
+  'auth/initializeAuth',
+  async (_, { rejectWithValue }) => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      const userJson = await AsyncStorage.getItem('user');
+      const user = userJson ? JSON.parse(userJson) : null;
+      if (token && user) {
+        return { token, user };
+      }
+      return { token: null, user: null };
+    } catch (err: any) {
+      return rejectWithValue(err.message || 'Failed to initialize auth');
+    }
+  }
+);
+
+export const logoutUserThunk = createAsyncThunk(
+  'auth/logoutUserThunk',
+  async (_, { dispatch }) => {
+    try {
+      await AsyncStorage.removeItem('token');
+      await AsyncStorage.removeItem('user');
+    } catch (err) {
+      console.error('Failed to clear AsyncStorage:', err);
+    } finally {
+      dispatch(authSlice.actions.logoutUser());
     }
   }
 );
@@ -111,6 +150,23 @@ const authSlice = createSlice({
         state.loading = false;
         state.error = action.payload as string;
         state.isAuthenticated = false;
+      })
+      // Initialize Auth
+      .addCase(initializeAuth.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(initializeAuth.fulfilled, (state, action) => {
+        state.loading = false;
+        state.token = action.payload.token;
+        state.user = action.payload.user;
+        state.isAuthenticated = !!action.payload.token;
+        state.isInitialized = true;
+      })
+      .addCase(initializeAuth.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload as string;
+        state.isInitialized = true;
       });
   },
 });

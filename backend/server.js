@@ -49,10 +49,14 @@ app.use((err, req, res, next) => {
   });
 });
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`==================================================`);
-  console.log(`DR Agencies Billing Backend is running on port ${PORT}`);
-  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`Supabase URL: ${process.env.SUPABASE_URL}`);
-  console.log(`==================================================`);
-});
+if (require.main === module) {
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`==================================================`);
+    console.log(`DR Agencies Billing Backend is running on port ${PORT}`);
+    console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`Supabase URL: ${process.env.SUPABASE_URL}`);
+    console.log(`==================================================`);
+  });
+}
+
+module.exports = app;
