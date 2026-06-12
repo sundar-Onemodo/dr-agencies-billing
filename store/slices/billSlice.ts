@@ -4,6 +4,7 @@ import { RootState } from '../index';
 
 export interface BillItem {
   id: string;
+  productId?: string;
   name: string;
   qty: number;
   price: number;

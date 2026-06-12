@@ -30,7 +30,44 @@ exports.createBill = async (req, res) => {
   }
 
   try {
-    // 1. Insert the main bill
+    // 1. Fetch current product stock from DB for all items
+    const productIds = items
+      .map(item => item.productId || item.product_id)
+      .filter(id => id && id !== 'null' && id !== '');
+    
+    let dbProducts = [];
+    if (productIds.length > 0) {
+      const { data, error: fetchError } = await supabase
+        .from('products')
+        .select('id, name, stock_qty')
+        .in('id', productIds)
+        .eq('user_id', req.user.id);
+      
+      if (fetchError) {
+        return res.status(400).json({ error: `Failed to fetch stock levels: ${fetchError.message}` });
+      }
+      dbProducts = data || [];
+    }
+
+    // 2. Validate stock before bill creation
+    for (const item of items) {
+      const rawProductId = item.productId || item.product_id;
+      if (rawProductId && rawProductId !== 'null' && rawProductId !== '') {
+        const dbProd = dbProducts.find(p => String(p.id) === String(rawProductId));
+        if (!dbProd) {
+          return res.status(404).json({ error: `Product "${item.name}" not found in inventory.` });
+        }
+        const quantity = parseFloat(item.qty || item.quantity || 1);
+        const stockQty = parseFloat(dbProd.stock_qty || 0);
+        if (quantity > stockQty) {
+          return res.status(400).json({
+            error: `Insufficient stock for product: ${item.name}. Available: ${stockQty}, Requested: ${quantity}`
+          });
+        }
+      }
+    }
+
+    // 3. Insert the main bill
     const billData = {
       user_id: req.user.id,
       invoice_number: finalInvoiceNumber,
@@ -51,7 +88,7 @@ exports.createBill = async (req, res) => {
       return res.status(400).json({ error: billError.message });
     }
 
-    // 2. Format and insert the bill items
+    // 4. Format and insert the bill items
     const billItemsData = items.map(item => {
       const quantity = parseFloat(item.qty || item.quantity || 1);
       const price = parseFloat(item.price || 0);
@@ -83,7 +120,69 @@ exports.createBill = async (req, res) => {
       return res.status(400).json({ error: `Failed to save invoice items: ${itemsError.message}` });
     }
 
-    // 3. Return the fully saved invoice with nested items
+    // 5. Update product stock atomically and track success for rollback
+    const updatedProducts = [];
+    let decrementFailed = false;
+    let failedItemName = '';
+    let failedItemAvailableStock = 0;
+    let failedItemRequestedQty = 0;
+
+    for (const item of items) {
+      const rawProductId = item.productId || item.product_id;
+      if (rawProductId && rawProductId !== 'null' && rawProductId !== '') {
+        const quantity = parseFloat(item.qty || item.quantity || 1);
+        
+        // Call RPC to decrement stock atomically
+        const { data: success, error: rpcError } = await supabase.rpc('decrement_product_stock', {
+          p_id: parseInt(rawProductId, 10),
+          p_qty: quantity,
+          p_user_id: req.user.id
+        });
+
+        if (rpcError || !success) {
+          decrementFailed = true;
+          failedItemName = item.name;
+          failedItemRequestedQty = quantity;
+          
+          // Fetch current stock to report in error message
+          const { data: updatedProd } = await supabase
+            .from('products')
+            .select('stock_qty')
+            .eq('id', rawProductId)
+            .single();
+            
+          failedItemAvailableStock = updatedProd ? parseFloat(updatedProd.stock_qty || 0) : 0;
+          break;
+        }
+
+        updatedProducts.push({
+          id: rawProductId,
+          qty: quantity
+        });
+      }
+    }
+
+    if (decrementFailed) {
+      console.log(`Stock decrement failed for "${failedItemName}". Rolling back transaction...`);
+      
+      // Rollback stock updates
+      for (const revert of updatedProducts) {
+        await supabase.rpc('decrement_product_stock', {
+          p_id: parseInt(revert.id, 10),
+          p_qty: -revert.qty, // Negative quantity reverts/adds stock back
+          p_user_id: req.user.id
+        });
+      }
+
+      // Rollback bill (cascades to bill_items due to ON DELETE CASCADE)
+      await supabase.from('bills').delete().eq('id', bill.id);
+
+      return res.status(400).json({
+        error: `Insufficient stock for product: ${failedItemName}. Available: ${failedItemAvailableStock}, Requested: ${failedItemRequestedQty}`
+      });
+    }
+
+    // 6. Return the fully saved invoice with nested items
     return res.status(201).json({
       success: true,
       message: 'Invoice created successfully.',

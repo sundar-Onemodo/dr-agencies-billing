@@ -30,6 +30,7 @@ export default function ProductsScreen() {
   const [name, setName] = useState('');
   const [price, setPrice] = useState('');
   const [gstRate, setGstRate] = useState('18'); // Default 18% GST
+  const [stockQty, setStockQty] = useState('0');
 
   // Open modal for adding
   const handleOpenAdd = () => {
@@ -37,6 +38,7 @@ export default function ProductsScreen() {
     setName('');
     setPrice('');
     setGstRate('18');
+    setStockQty('0');
     setModalVisible(true);
   };
 
@@ -46,17 +48,19 @@ export default function ProductsScreen() {
     setName(product.name);
     setPrice(product.price.toString());
     setGstRate(product.gstRate.toString());
+    setStockQty(product.stockQty?.toString() || '0');
     setModalVisible(true);
   };
 
   // Handle Save
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!name.trim()) {
       Alert.alert('Validation Error', 'Product Name is required');
       return;
     }
     const p = parseFloat(price);
     const g = parseInt(gstRate, 10);
+    const s = parseFloat(stockQty);
 
     if (isNaN(p) || p <= 0) {
       Alert.alert('Validation Error', 'Please enter a valid price greater than 0');
@@ -66,25 +70,34 @@ export default function ProductsScreen() {
       Alert.alert('Validation Error', 'Please enter a valid GST percentage');
       return;
     }
-
-    if (editingProduct) {
-      // Update
-      updateProduct({
-        id: editingProduct.id,
-        name,
-        price: p,
-        gstRate: g,
-      });
-    } else {
-      // Create
-      addProduct({
-        name,
-        price: p,
-        gstRate: g,
-      });
+    if (isNaN(s) || s < 0) {
+      Alert.alert('Validation Error', 'Stock Quantity cannot be negative');
+      return;
     }
 
-    setModalVisible(false);
+    try {
+      if (editingProduct) {
+        // Update
+        await updateProduct({
+          id: editingProduct.id,
+          name,
+          price: p,
+          gstRate: g,
+          stockQty: s,
+        });
+      } else {
+        // Create
+        await addProduct({
+          name,
+          price: p,
+          gstRate: g,
+          stockQty: s,
+        });
+      }
+      setModalVisible(false);
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Failed to save product');
+    }
   };
 
   // Handle Delete
@@ -152,27 +165,53 @@ export default function ProductsScreen() {
             </TouchableOpacity>
           </GlassCard>
         ) : (
-          filteredProducts.map((item) => (
-            <GlassCard key={item.id} style={styles.productCard}>
-              <View style={styles.cardInfo}>
-                <Text style={styles.productName}>{item.name}</Text>
-                <View style={styles.metaRow}>
-                  <Text style={styles.productPrice}>{formatCurrency(item.price)}</Text>
-                  <View style={styles.gstBadge}>
-                    <Text style={styles.gstText}>GST {item.gstRate}%</Text>
+          filteredProducts.map((item) => {
+            const isLowStock = item.stockQty > 0 && item.stockQty < 10;
+            const isOutOfStock = item.stockQty <= 0;
+
+            return (
+              <GlassCard key={item.id} style={styles.productCard}>
+                <View style={styles.cardInfo}>
+                  <Text style={styles.productName}>{item.name}</Text>
+                  <View style={styles.metaRow}>
+                    <Text style={styles.productPrice}>{formatCurrency(item.price)}</Text>
+                    <View style={styles.gstBadge}>
+                      <Text style={styles.gstText}>GST {item.gstRate}%</Text>
+                    </View>
+                    {isOutOfStock ? (
+                      <View style={[styles.stockBadge, styles.outOfStockBadge]}>
+                        <Text style={[styles.stockText, styles.outOfStockText]}>OUT OF STOCK</Text>
+                      </View>
+                    ) : (
+                      <View
+                        style={[
+                          styles.stockBadge,
+                          isLowStock ? styles.lowStockBadge : styles.inStockBadge,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.stockText,
+                            isLowStock ? styles.lowStockText : styles.inStockText,
+                          ]}
+                        >
+                          Stock: {item.stockQty}
+                        </Text>
+                      </View>
+                    )}
                   </View>
                 </View>
-              </View>
-              <View style={styles.cardActions}>
-                <TouchableOpacity style={styles.actionIconBtn} onPress={() => handleOpenEdit(item)}>
-                  <Ionicons name="pencil" size={18} color="#D4AF37" />
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.actionIconBtn} onPress={() => handleDelete(item.id, item.name)}>
-                  <Ionicons name="trash-outline" size={18} color="#FF4B4B" />
-                </TouchableOpacity>
-              </View>
-            </GlassCard>
-          ))
+                <View style={styles.cardActions}>
+                  <TouchableOpacity style={styles.actionIconBtn} onPress={() => handleOpenEdit(item)}>
+                    <Ionicons name="pencil" size={18} color="#D4AF37" />
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.actionIconBtn} onPress={() => handleDelete(item.id, item.name)}>
+                    <Ionicons name="trash-outline" size={18} color="#FF4B4B" />
+                  </TouchableOpacity>
+                </View>
+              </GlassCard>
+            );
+          })
         )}
       </ScrollView>
 
@@ -214,6 +253,15 @@ export default function ProductsScreen() {
                 onChangeText={setGstRate}
                 keyboardType="numeric"
                 iconName="receipt-outline"
+              />
+
+              <InputField
+                label="Stock Quantity"
+                placeholder="e.g. 100"
+                value={stockQty}
+                onChangeText={setStockQty}
+                keyboardType="numeric"
+                iconName="layers-outline"
               />
 
               <View style={styles.gstShortcuts}>
@@ -443,5 +491,36 @@ const styles = StyleSheet.create({
   },
   modalSaveBtn: {
     marginTop: 24,
+  },
+  stockBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 0.5,
+  },
+  inStockBadge: {
+    backgroundColor: 'rgba(75, 255, 75, 0.06)',
+    borderColor: 'rgba(75, 255, 75, 0.15)',
+  },
+  lowStockBadge: {
+    backgroundColor: 'rgba(255, 200, 75, 0.08)',
+    borderColor: 'rgba(255, 200, 75, 0.2)',
+  },
+  outOfStockBadge: {
+    backgroundColor: 'rgba(255, 75, 75, 0.08)',
+    borderColor: 'rgba(255, 75, 75, 0.2)',
+  },
+  stockText: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  inStockText: {
+    color: '#4BFF4B',
+  },
+  lowStockText: {
+    color: '#FFC84B',
+  },
+  outOfStockText: {
+    color: '#FF4B4B',
   },
 });

@@ -117,7 +117,8 @@ async function runTests() {
     const productData = {
       name: 'Test Copper Cable 1.5mm',
       price: 1500.00,
-      gstRate: 18
+      gstRate: 18,
+      stockQty: 50
     };
     const addProductRes = await fetch(`${BASE_URL}/products/add`, {
       method: 'POST',
@@ -129,6 +130,24 @@ async function runTests() {
 
     if (addProductRes.ok) {
       createdProductId = addProductData.product.id;
+    }
+
+    // 7.5 Update Product (protected)
+    if (createdProductId) {
+      console.log('\nUpdating the Product...');
+      const updateData = {
+        name: 'Test Copper Cable 1.5mm (Updated)',
+        price: 1600.00,
+        gstRate: 18,
+        stockQty: 45
+      };
+      const updateProductRes = await fetch(`${BASE_URL}/products/${createdProductId}`, {
+        method: 'PUT',
+        headers: authHeaders,
+        body: JSON.stringify(updateData)
+      });
+      const updateProductData = await updateProductRes.json();
+      logStep('PUT /products/:id', updateProductRes.ok, updateProductData);
     }
 
     // 8. List Products (protected)

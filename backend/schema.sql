@@ -35,6 +35,7 @@ CREATE TABLE public.products (
     name TEXT NOT NULL,
     price NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
     gst_rate NUMERIC(5, 2) NOT NULL DEFAULT 0.00, -- e.g. 18.00
+    stock_qty NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
@@ -75,3 +76,22 @@ ALTER TABLE public.stores DISABLE ROW LEVEL SECURITY;
 ALTER TABLE public.products DISABLE ROW LEVEL SECURITY;
 ALTER TABLE public.bills DISABLE ROW LEVEL SECURITY;
 ALTER TABLE public.bill_items DISABLE ROW LEVEL SECURITY;
+
+-- 5. Helper Function for atomic/concurrent stock decrement and validation
+CREATE OR REPLACE FUNCTION public.decrement_product_stock(
+  p_id BIGINT,
+  p_qty NUMERIC,
+  p_user_id UUID
+)
+RETURNS BOOLEAN AS $$
+DECLARE
+  v_updated INTEGER;
+BEGIN
+  UPDATE public.products
+  SET stock_qty = stock_qty - p_qty
+  WHERE id = p_id AND user_id = p_user_id AND stock_qty >= p_qty;
+  
+  GET DIAGNOSTICS v_updated = ROW_COUNT;
+  RETURN v_updated > 0;
+END;
+$$ LANGUAGE plpgsql;

@@ -5,7 +5,7 @@ import {
   fetchProducts, 
   addProduct as addProductThunk, 
   deleteProduct as deleteProductThunk,
-  updateProductLocal
+  updateProduct as updateProductThunk
 } from '../store/slices/productSlice';
 import { 
   fetchRecentBills, 
@@ -24,10 +24,12 @@ export interface Product {
   name: string;
   price: number;
   gstRate: number; // e.g. 18 for 18%
+  stockQty: number;
 }
 
 export interface BillItem {
   id: string;
+  productId?: string;
   name: string;
   qty: number;
   price: number;
@@ -71,11 +73,11 @@ interface BillingContextType {
   login: (email: string, password: string) => Promise<boolean>;
   logout: () => void;
   products: Product[];
-  addProduct: (product: Omit<Product, 'id'>) => void;
-  updateProduct: (product: Product) => void;
+  addProduct: (product: Omit<Product, 'id'>) => Promise<void>;
+  updateProduct: (product: Product) => Promise<void>;
   deleteProduct: (id: string) => void;
   bills: Bill[];
-  addBill: (bill: Omit<Bill, 'id'>) => string; // returns generated invoice ID
+  addBill: (bill: Omit<Bill, 'id'>) => Promise<string>; // returns generated invoice ID
   companySettings: CompanySettings;
   updateCompanySettings: (settings: CompanySettings) => void;
   printerSettings: PrinterSettings;
@@ -119,12 +121,18 @@ export const BillingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     dispatch(logoutUserThunk());
   };
 
-  const addProduct = (newProduct: Omit<Product, 'id'>) => {
-    dispatch(addProductThunk(newProduct));
+  const addProduct = async (newProduct: Omit<Product, 'id'>): Promise<void> => {
+    const resultAction = await dispatch(addProductThunk(newProduct));
+    if (addProductThunk.rejected.match(resultAction)) {
+      throw new Error(resultAction.payload as string || 'Failed to add product');
+    }
   };
 
-  const updateProduct = (updatedProduct: Product) => {
-    dispatch(updateProductLocal(updatedProduct));
+  const updateProduct = async (updatedProduct: Product): Promise<void> => {
+    const resultAction = await dispatch(updateProductThunk(updatedProduct));
+    if (updateProductThunk.rejected.match(resultAction)) {
+      throw new Error(resultAction.payload as string || 'Failed to update product');
+    }
   };
 
   const deleteProduct = (id: string) => {
@@ -155,15 +163,21 @@ export const BillingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return `${serialPrefix}${todayStr}`;
   };
 
-  const addBill = (newBill: Omit<Bill, 'id'>): string => {
+  const addBill = async (newBill: Omit<Bill, 'id'>): Promise<string> => {
     const nextInvoiceId = newBill.invoiceNumber || generateNextInvoiceNumber();
-    
     const { date, ...billDetails } = newBill;
 
-    dispatch(createBillThunk({
+    const resultAction = await dispatch(createBillThunk({
       ...billDetails,
       invoiceNumber: nextInvoiceId
     }));
+    
+    if (createBillThunk.rejected.match(resultAction)) {
+      throw new Error(resultAction.payload as string || 'Failed to create bill');
+    }
+    
+    // Automatically refresh products list to reflect updated stock in UI
+    dispatch(fetchProducts());
     
     return nextInvoiceId;
   };

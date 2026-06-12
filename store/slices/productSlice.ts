@@ -7,6 +7,7 @@ export interface Product {
   name: string;
   price: number;
   gstRate: number;
+  stockQty: number;
 }
 
 interface ProductState {
@@ -96,6 +97,29 @@ export const deleteProduct = createAsyncThunk(
   }
 );
 
+export const updateProduct = createAsyncThunk(
+  'products/updateProduct',
+  async (product: Product, { getState, rejectWithValue }) => {
+    try {
+      const headers = getAuthHeaders(getState() as RootState);
+      const { id, ...productData } = product;
+      const response = await fetch(`${API_URL}/products/${id}`, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify(productData)
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        return rejectWithValue(data.error || 'Failed to update product');
+      }
+      return data.product as Product;
+    } catch (err: any) {
+      return rejectWithValue(err.message || 'Server connection failed');
+    }
+  }
+);
+
 const productSlice = createSlice({
   name: 'products',
   initialState,
@@ -145,6 +169,19 @@ const productSlice = createSlice({
         state.items = state.items.filter(item => item.id !== action.payload);
       })
       .addCase(deleteProduct.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload as string;
+      })
+      // Update Product
+      .addCase(updateProduct.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(updateProduct.fulfilled, (state, action) => {
+        state.loading = false;
+        state.items = state.items.map(item => item.id === action.payload.id ? action.payload : item);
+      })
+      .addCase(updateProduct.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload as string;
       });

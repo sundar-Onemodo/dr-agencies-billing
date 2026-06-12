@@ -5,10 +5,15 @@ const supabase = require('../config/supabase');
  * POST /products/add
  */
 exports.addProduct = async (req, res) => {
-  const { name, price, gstRate } = req.body;
+  const { name, price, gstRate, stockQty } = req.body;
 
-  if (!name || price === undefined || gstRate === undefined) {
-    return res.status(400).json({ error: 'Product name, price, and gstRate are required.' });
+  if (!name || price === undefined || gstRate === undefined || stockQty === undefined) {
+    return res.status(400).json({ error: 'Product name, price, gstRate, and stockQty are required.' });
+  }
+
+  const parsedStock = parseFloat(stockQty);
+  if (isNaN(parsedStock) || parsedStock < 0) {
+    return res.status(400).json({ error: 'Stock quantity cannot be negative.' });
   }
 
   try {
@@ -16,7 +21,8 @@ exports.addProduct = async (req, res) => {
       user_id: req.user.id,
       name,
       price: parseFloat(price),
-      gst_rate: parseFloat(gstRate)
+      gst_rate: parseFloat(gstRate),
+      stock_qty: parsedStock
     };
 
     const { data, error } = await supabase
@@ -37,6 +43,7 @@ exports.addProduct = async (req, res) => {
         name: data.name,
         price: parseFloat(data.price),
         gstRate: parseFloat(data.gst_rate),
+        stockQty: parseFloat(data.stock_qty || 0),
         createdAt: data.created_at
       }
     });
@@ -67,6 +74,7 @@ exports.listProducts = async (req, res) => {
       name: product.name,
       price: parseFloat(product.price),
       gstRate: parseFloat(product.gst_rate),
+      stockQty: parseFloat(product.stock_qty || 0),
       createdAt: product.created_at
     }));
 
@@ -114,5 +122,58 @@ exports.deleteProduct = async (req, res) => {
   } catch (err) {
     console.error('Delete Product Error:', err.message || err);
     return res.status(500).json({ error: 'Server error deleting product.' });
+  }
+};
+
+/**
+ * Update an existing product
+ * PUT /products/:id
+ */
+exports.updateProduct = async (req, res) => {
+  const { id } = req.params;
+  const { name, price, gstRate, stockQty } = req.body;
+
+  if (!name || price === undefined || gstRate === undefined || stockQty === undefined) {
+    return res.status(400).json({ error: 'Product name, price, gstRate, and stockQty are required.' });
+  }
+
+  const parsedStock = parseFloat(stockQty);
+  if (isNaN(parsedStock) || parsedStock < 0) {
+    return res.status(400).json({ error: 'Stock quantity cannot be negative.' });
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('products')
+      .update({
+        name,
+        price: parseFloat(price),
+        gst_rate: parseFloat(gstRate),
+        stock_qty: parsedStock
+      })
+      .eq('id', id)
+      .eq('user_id', req.user.id)
+      .select()
+      .single();
+
+    if (error) {
+      return res.status(400).json({ error: error.message });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'Product updated successfully.',
+      product: {
+        id: String(data.id),
+        name: data.name,
+        price: parseFloat(data.price),
+        gstRate: parseFloat(data.gst_rate),
+        stockQty: parseFloat(data.stock_qty || 0),
+        createdAt: data.created_at
+      }
+    });
+  } catch (err) {
+    console.error('Update Product Error:', err.message || err);
+    return res.status(500).json({ error: 'Server error updating product.' });
   }
 };

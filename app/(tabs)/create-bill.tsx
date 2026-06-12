@@ -41,6 +41,7 @@ export default function CreateBillScreen() {
   const [showProductDropdown, setShowProductDropdown] = useState(false);
   const [qty, setQty] = useState('1');
   const [price, setPrice] = useState('');
+  const [saving, setSaving] = useState(false);
   
   // GST Toggle State
   const [gstEnabled, setGstEnabled] = useState(true);
@@ -85,9 +86,24 @@ export default function CreateBillScreen() {
       return;
     }
 
+    if (selectedProduct) {
+      const existingQty = items
+        .filter((item) => item.productId === selectedProduct.id)
+        .reduce((sum, item) => sum + item.qty, 0);
+
+      if (existingQty + q > selectedProduct.stockQty) {
+        Alert.alert(
+          'Insufficient Stock',
+          `Cannot add item. Only ${selectedProduct.stockQty} items are available in stock. You have already added ${existingQty} items to this bill.`
+        );
+        return;
+      }
+    }
+
     const amount = q * p;
     const newItem: BillItem = {
       id: Date.now().toString(),
+      productId: selectedProduct?.id,
       name: searchQuery,
       qty: q,
       price: p,
@@ -125,7 +141,7 @@ export default function CreateBillScreen() {
   };
 
   // Save Bill
-  const handleSaveBill = () => {
+  const handleSaveBill = async () => {
     if (!customerName.trim()) {
       Alert.alert('Validation Error', 'Please enter Customer Name');
       return;
@@ -147,18 +163,25 @@ export default function CreateBillScreen() {
       total,
     };
 
-    const newInvoiceNo = addBill(finalBill);
-    Alert.alert('Success', `Invoice ${newInvoiceNo} saved successfully!`, [
-      {
-        text: 'OK',
-        onPress: () => {
-          // Reset Create Bill Screen
-          setCustomerName('');
-          setItems([]);
-          setInvoiceNo(generateNextInvoiceNumber());
+    try {
+      setSaving(true);
+      const newInvoiceNo = await addBill(finalBill);
+      Alert.alert('Success', `Invoice ${newInvoiceNo} saved successfully!`, [
+        {
+          text: 'OK',
+          onPress: () => {
+            // Reset Create Bill Screen
+            setCustomerName('');
+            setItems([]);
+            setInvoiceNo(generateNextInvoiceNumber());
+          },
         },
-      },
-    ]);
+      ]);
+    } catch (err: any) {
+      Alert.alert('Billing Error', err.message || 'Failed to save bill');
+    } finally {
+      setSaving(false);
+    }
   };
 
   // Preview Bill
@@ -418,16 +441,35 @@ export default function CreateBillScreen() {
                       <Text style={styles.dropdownItemText}>Use custom item "{searchQuery}"</Text>
                     </TouchableOpacity>
                   ) : (
-                    filteredProducts.map((p) => (
-                      <TouchableOpacity
-                        key={p.id}
-                        style={styles.dropdownItem}
-                        onPress={() => handleSelectProduct(p)}
-                      >
-                        <Text style={styles.dropdownItemText}>{p.name}</Text>
-                        <Text style={styles.dropdownItemPrice}>{formatCurrency(p.price)}</Text>
-                      </TouchableOpacity>
-                    ))
+                    filteredProducts.map((p) => {
+                      const isLowStock = p.stockQty > 0 && p.stockQty < 10;
+                      const isOutOfStock = p.stockQty <= 0;
+
+                      return (
+                        <TouchableOpacity
+                          key={p.id}
+                          style={styles.dropdownItem}
+                          onPress={() => handleSelectProduct(p)}
+                          disabled={isOutOfStock}
+                        >
+                          <View style={{ flex: 1 }}>
+                            <Text style={[styles.dropdownItemText, isOutOfStock && { opacity: 0.5 }]}>
+                              {p.name}
+                            </Text>
+                            {isOutOfStock ? (
+                              <Text style={styles.dropdownItemOutOfStock}>Out of Stock</Text>
+                            ) : isLowStock ? (
+                              <Text style={styles.dropdownItemLowStock}>Only {p.stockQty} left</Text>
+                            ) : (
+                              <Text style={styles.dropdownItemStock}>Stock: {p.stockQty}</Text>
+                            )}
+                          </View>
+                          <Text style={[styles.dropdownItemPrice, isOutOfStock && { opacity: 0.5 }]}>
+                            {formatCurrency(p.price)}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })
                   )}
                 </View>
               )}
@@ -549,9 +591,19 @@ export default function CreateBillScreen() {
             <Text style={styles.btnSecondaryText}>Preview</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={[styles.footerBtn, styles.btnPrimary]} onPress={handleSaveBill}>
-            <Ionicons name="save-outline" size={20} color="#191820" />
-            <Text style={styles.btnPrimaryText}>Save Bill</Text>
+          <TouchableOpacity 
+            style={[styles.footerBtn, styles.btnPrimary, saving && { opacity: 0.6 }]} 
+            onPress={handleSaveBill}
+            disabled={saving}
+          >
+            {saving ? (
+              <Text style={styles.btnPrimaryText}>Saving...</Text>
+            ) : (
+              <>
+                <Ionicons name="save-outline" size={20} color="#191820" />
+                <Text style={styles.btnPrimaryText}>Save Bill</Text>
+              </>
+            )}
           </TouchableOpacity>
 
           <TouchableOpacity style={[styles.footerBtn, styles.btnSecondary]} onPress={handlePrint}>
@@ -676,6 +728,23 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     marginLeft: 8,
+  },
+  dropdownItemStock: {
+    color: '#6e6e7c',
+    fontSize: 11,
+    marginTop: 2,
+  },
+  dropdownItemLowStock: {
+    color: '#FFC84B',
+    fontSize: 11,
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  dropdownItemOutOfStock: {
+    color: '#FF4B4B',
+    fontSize: 11,
+    fontWeight: '600',
+    marginTop: 2,
   },
   inputRow: {
     flexDirection: 'row',
