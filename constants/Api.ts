@@ -9,10 +9,10 @@ import { Platform } from 'react-native';
  * - Production: Replace with your deployed server URL (e.g., https://your-backend.onrender.com)
  */
 const LOCAL_API_URL = Platform.select({
-  android: 'http://10.0.2.2:5000', // Points to localhost on Android Emulator
-  ios: 'http://localhost:5000',
-  default: 'http://localhost:5000',
+  android: 'https://dr-agencies-billing.vercel.app', // Points to localhost on Android Emulator
+  ios: 'https://dr-agencies-billing.vercel.app',
+  default: 'https://dr-agencies-billing.vercel.app',
 });
 
 // Uses local server in development, Vercel in production
-export const API_URL = __DEV__ ? (LOCAL_API_URL || 'http://localhost:5000') : 'https://dr-agencies-billing.vercel.app';
+export const API_URL = LOCAL_API_URL;
