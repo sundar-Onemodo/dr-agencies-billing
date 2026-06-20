@@ -321,3 +321,66 @@ exports.getBillById = async (req, res) => {
     return res.status(500).json({ error: 'Server error retrieving invoice details.' });
   }
 };
+
+/**
+ * Delete a bill (invoice) by ID and restore product stock levels
+ * DELETE /bills/:id
+ */
+exports.deleteBill = async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    // 1. Fetch the bill and its items to restore stock
+    const { data: bill, error: fetchError } = await supabase
+      .from('bills')
+      .select(`
+        *,
+        bill_items (
+          *
+        )
+      `)
+      .eq('id', id)
+      .eq('user_id', req.user.id)
+      .maybeSingle();
+
+    if (fetchError) {
+      return res.status(400).json({ error: fetchError.message });
+    }
+
+    if (!bill) {
+      return res.status(404).json({ error: 'Invoice not found or unauthorized.' });
+    }
+
+    // 2. Restore stock for each item that has a product_id
+    const items = bill.bill_items || [];
+    for (const item of items) {
+      if (item.product_id) {
+        // Increment stock by passing negative quantity to decrement function
+        await supabase.rpc('decrement_product_stock', {
+          p_id: parseInt(item.product_id, 10),
+          p_qty: -parseFloat(item.quantity),
+          p_user_id: req.user.id
+        });
+      }
+    }
+
+    // 3. Delete the bill from database (ON DELETE CASCADE deletes bill_items)
+    const { error: deleteError } = await supabase
+      .from('bills')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', req.user.id);
+
+    if (deleteError) {
+      return res.status(400).json({ error: deleteError.message });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'Invoice deleted successfully and stock restored.'
+    });
+  } catch (err) {
+    console.error('Delete Bill Error:', err.message || err);
+    return res.status(500).json({ error: 'Server error deleting invoice.' });
+  }
+};

@@ -1,13 +1,36 @@
 import React from 'react';
-import { StyleSheet, Text, View, ScrollView, FlatList, TouchableOpacity, SafeAreaView, Dimensions, Platform } from 'react-native';
+import { StyleSheet, Text, View, ScrollView, FlatList, TouchableOpacity, SafeAreaView, Dimensions, Platform, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { parseCustomerInfo } from '@/utils/customer';
 import { useBilling } from '@/context/BillingContext';
 import { GlassCard } from '@/components/ui/GlassCard';
 
 export default function DashboardScreen() {
   const router = useRouter();
-  const { bills, companySettings } = useBilling();
+  const { bills, companySettings, deleteBill } = useBilling();
+
+  const handleDeleteBill = (id: string, invoiceNo: string) => {
+    Alert.alert(
+      'Delete Invoice',
+      `Are you sure you want to delete invoice "${invoiceNo}"? This will restore product stock levels.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Delete', 
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteBill(id);
+              Alert.alert('Success', 'Invoice deleted successfully');
+            } catch (err: any) {
+              Alert.alert('Error', err.message || 'Failed to delete invoice');
+            }
+          }
+        }
+      ]
+    );
+  };
 
   // Helper to format currency
   const formatCurrency = (value: number) => {
@@ -190,29 +213,39 @@ export default function DashboardScreen() {
           </GlassCard>
         ) : (
           bills.slice(0, 5).map((item) => (
-            <TouchableOpacity
-              key={item.id}
-              style={styles.billCard}
-              activeOpacity={0.7}
-              onPress={() => handlePreviewBill(item.id)}
-            >
-              <View style={styles.billLeft}>
-                <View style={styles.billIconContainer}>
-                  <Ionicons name="document-text" size={20} color="#D4AF37" />
+            <View key={item.id} style={styles.billCard}>
+              <TouchableOpacity
+                style={{ flex: 1, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}
+                activeOpacity={0.7}
+                onPress={() => handlePreviewBill(item.id)}
+              >
+                <View style={styles.billLeft}>
+                  <View style={styles.billIconContainer}>
+                    <Ionicons name="document-text" size={20} color="#D4AF37" />
+                  </View>
+                  <View style={{ flex: 1, paddingRight: 8 }}>
+                    <Text style={styles.billInvoiceNo} numberOfLines={1}>{item.invoiceNumber || item.id}</Text>
+                    <Text style={styles.billCustomer} numberOfLines={1}>{parseCustomerInfo(item.customerName).name}</Text>
+                  </View>
                 </View>
-                <View>
-                  <Text style={styles.billInvoiceNo}>{item.invoiceNumber || item.id}</Text>
-                  <Text style={styles.billCustomer}>{item.customerName}</Text>
+                <View style={styles.billRight}>
+                  <Text style={styles.billAmount}>{formatCurrency(item.total)}</Text>
+                  <View style={styles.billDateRow}>
+                    <Text style={styles.billDate}>{formatDateForDisplay(item.date)}</Text>
+                    <Ionicons name="chevron-forward" size={14} color="#A0A0B0" style={{ marginLeft: 4 }} />
+                  </View>
                 </View>
-              </View>
-              <View style={styles.billRight}>
-                <Text style={styles.billAmount}>{formatCurrency(item.total)}</Text>
-                <View style={styles.billDateRow}>
-                  <Text style={styles.billDate}>{formatDateForDisplay(item.date)}</Text>
-                  <Ionicons name="chevron-forward" size={14} color="#A0A0B0" style={{ marginLeft: 4 }} />
-                </View>
-              </View>
-            </TouchableOpacity>
+              </TouchableOpacity>
+              
+              <View style={styles.billDeleteDivider} />
+              
+              <TouchableOpacity
+                style={styles.billDeleteBtn}
+                onPress={() => handleDeleteBill(item.id, item.invoiceNumber || item.id)}
+              >
+                <Ionicons name="trash-outline" size={20} color="#FF4B4B" />
+              </TouchableOpacity>
+            </View>
           ))
         )}
       </ScrollView>
@@ -452,6 +485,17 @@ const styles = StyleSheet.create({
     color: '#D4AF37',
     fontSize: 13,
     fontWeight: '700',
+  },
+  billDeleteDivider: {
+    width: 1,
+    height: 24,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    marginHorizontal: 12,
+  },
+  billDeleteBtn: {
+    padding: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });
 

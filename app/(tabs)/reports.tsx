@@ -7,18 +7,42 @@ import {
   TouchableOpacity,
   SafeAreaView,
   Platform,
+  Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useBilling, Bill } from '@/context/BillingContext';
 import { GlassCard } from '@/components/ui/GlassCard';
+import { parseCustomerInfo } from '@/utils/customer';
 
 type FilterType = 'today' | 'weekly' | 'monthly';
 
 export default function ReportsScreen() {
   const router = useRouter();
-  const { bills } = useBilling();
+  const { bills, deleteBill } = useBilling();
   const [activeFilter, setActiveFilter] = useState<FilterType>('monthly'); // Default monthly to show mock data
+
+  const handleDeleteBill = (id: string, invoiceNo: string) => {
+    Alert.alert(
+      'Delete Invoice',
+      `Are you sure you want to delete invoice "${invoiceNo}"? This will restore product stock levels.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Delete', 
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteBill(id);
+              Alert.alert('Success', 'Invoice deleted successfully');
+            } catch (err: any) {
+              Alert.alert('Error', err.message || 'Failed to delete invoice');
+            }
+          }
+        }
+      ]
+    );
+  };
 
   // Helper to parse date string (ISO or DD-MM-YYYY)
   const parseDateString = (dateStr: string): Date => {
@@ -178,29 +202,39 @@ export default function ReportsScreen() {
           </GlassCard>
         ) : (
           filteredBills.map((item) => (
-            <TouchableOpacity
-              key={item.id}
-              style={styles.invoiceRow}
-              activeOpacity={0.7}
-              onPress={() => handlePreviewBill(item.id)}
-            >
-              <View style={styles.rowLeft}>
-                <View style={styles.invoiceIconBg}>
-                  <Ionicons name="document-text" size={18} color="#D4AF37" />
+            <View key={item.id} style={styles.invoiceRow}>
+              <TouchableOpacity
+                style={{ flex: 1, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}
+                activeOpacity={0.7}
+                onPress={() => handlePreviewBill(item.id)}
+              >
+                <View style={styles.rowLeft}>
+                  <View style={styles.invoiceIconBg}>
+                    <Ionicons name="document-text" size={18} color="#D4AF37" />
+                  </View>
+                  <View style={{ flex: 1, paddingRight: 8 }}>
+                    <Text style={styles.invoiceNo} numberOfLines={1}>{item.invoiceNumber || item.id}</Text>
+                    <Text style={styles.customerName} numberOfLines={1}>
+                      {parseCustomerInfo(item.customerName).name}
+                    </Text>
+                  </View>
                 </View>
-                <View>
-                  <Text style={styles.invoiceNo}>{item.invoiceNumber || item.id}</Text>
-                  <Text style={styles.customerName} numberOfLines={1}>
-                    {item.customerName}
-                  </Text>
-                </View>
-              </View>
 
-              <View style={styles.rowRight}>
-                <Text style={styles.invoiceAmt}>{formatCurrency(item.total)}</Text>
-                <Text style={styles.invoiceDate}>{formatDateForDisplay(item.date)}</Text>
-              </View>
-            </TouchableOpacity>
+                <View style={styles.rowRight}>
+                  <Text style={styles.invoiceAmt}>{formatCurrency(item.total)}</Text>
+                  <Text style={styles.invoiceDate}>{formatDateForDisplay(item.date)}</Text>
+                </View>
+              </TouchableOpacity>
+              
+              <View style={styles.deleteDivider} />
+              
+              <TouchableOpacity
+                style={styles.deleteBtn}
+                onPress={() => handleDeleteBill(item.id, item.invoiceNumber || item.id)}
+              >
+                <Ionicons name="trash-outline" size={18} color="#FF4B4B" />
+              </TouchableOpacity>
+            </View>
           ))
         )}
       </ScrollView>
@@ -371,5 +405,16 @@ const styles = StyleSheet.create({
     color: '#6e6e7c',
     fontSize: 10,
     marginTop: 2,
+  },
+  deleteDivider: {
+    width: 1,
+    height: 24,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    marginHorizontal: 12,
+  },
+  deleteBtn: {
+    padding: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

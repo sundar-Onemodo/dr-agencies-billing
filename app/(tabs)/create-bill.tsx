@@ -21,6 +21,8 @@ import { GoldButton } from '@/components/ui/GoldButton';
 import { InputField } from '@/components/ui/InputField';
 import { BluetoothEscposPrinter } from 'react-native-bluetooth-escpos-printer';
 import { PrinterSimulationModal } from '@/components/ui/PrinterSimulationModal';
+import { serializeCustomerInfo } from '@/utils/customer';
+import { printA4Invoice } from '@/utils/printA4';
 
 export default function CreateBillScreen() {
   const router = useRouter();
@@ -32,6 +34,9 @@ export default function CreateBillScreen() {
   // Active Bill States
   const [invoiceNo, setInvoiceNo] = useState('');
   const [customerName, setCustomerName] = useState('');
+  const [customerAddress, setCustomerAddress] = useState('');
+  const [customerGstin, setCustomerGstin] = useState('');
+  const [customerState, setCustomerState] = useState('Tamil Nadu');
   const [billingDate, setBillingDate] = useState('');
   const [items, setItems] = useState<BillItem[]>([]);
   
@@ -153,7 +158,12 @@ export default function CreateBillScreen() {
 
     const finalBill = {
       invoiceNumber: invoiceNo,
-      customerName,
+      customerName: serializeCustomerInfo({
+        name: customerName,
+        address: customerAddress,
+        gstin: customerGstin,
+        state: customerState,
+      }),
       date: billingDate,
       items,
       subtotal,
@@ -172,6 +182,9 @@ export default function CreateBillScreen() {
           onPress: () => {
             // Reset Create Bill Screen
             setCustomerName('');
+            setCustomerAddress('');
+            setCustomerGstin('');
+            setCustomerState('Tamil Nadu');
             setItems([]);
             setInvoiceNo(generateNextInvoiceNumber());
           },
@@ -198,7 +211,12 @@ export default function CreateBillScreen() {
     // Build temporary draft details to display in preview screen
     const draftBill = {
       id: invoiceNo,
-      customerName,
+      customerName: serializeCustomerInfo({
+        name: customerName,
+        address: customerAddress,
+        gstin: customerGstin,
+        state: customerState,
+      }),
       date: billingDate,
       items,
       subtotal,
@@ -221,6 +239,31 @@ export default function CreateBillScreen() {
   const handlePrint = async () => {
     if (items.length === 0) {
       Alert.alert('Validation Error', 'Cannot print an empty invoice');
+      return;
+    }
+
+    if (printerSettings.paperSize === 'A4') {
+      try {
+        await printA4Invoice({
+          id: invoiceNo,
+          invoiceNumber: invoiceNo,
+          customerName: serializeCustomerInfo({
+            name: customerName,
+            address: customerAddress,
+            gstin: customerGstin,
+            state: customerState,
+          }),
+          date: billingDate,
+          items,
+          subtotal,
+          gstEnabled,
+          cgst,
+          sgst,
+          total,
+        }, companySettings);
+      } catch (error) {
+        Alert.alert('Printing Error', 'Could not open print sheet.');
+      }
       return;
     }
     
@@ -410,6 +453,35 @@ export default function CreateBillScreen() {
               onChangeText={setCustomerName}
               iconName="person"
             />
+            <InputField
+              label="Customer Address"
+              placeholder="Enter customer address"
+              value={customerAddress}
+              onChangeText={setCustomerAddress}
+              iconName="location-outline"
+              multiline
+            />
+            <View style={styles.inputRow}>
+              <View style={{ flex: 1, marginRight: 12 }}>
+                <InputField
+                  label="Customer GSTIN"
+                  placeholder="e.g. 33AYUPA8362M1ZV"
+                  value={customerGstin}
+                  onChangeText={setCustomerGstin}
+                  autoCapitalize="characters"
+                  iconName="shield-checkmark-outline"
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <InputField
+                  label="Customer State"
+                  placeholder="e.g. Tamil Nadu"
+                  value={customerState}
+                  onChangeText={setCustomerState}
+                  iconName="map-outline"
+                />
+              </View>
+            </View>
           </GlassCard>
 
           {/* Item Entry Section */}
@@ -438,7 +510,7 @@ export default function CreateBillScreen() {
                       style={styles.dropdownItem}
                       onPress={() => setShowProductDropdown(false)}
                     >
-                      <Text style={styles.dropdownItemText}>Use custom item "{searchQuery}"</Text>
+                      <Text style={styles.dropdownItemText}>Use custom item &quot;{searchQuery}&quot;</Text>
                     </TouchableOpacity>
                   ) : (
                     filteredProducts.map((p) => {

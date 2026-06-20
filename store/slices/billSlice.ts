@@ -107,6 +107,27 @@ export const fetchBillDetails = createAsyncThunk(
   }
 );
 
+export const deleteBill = createAsyncThunk(
+  'bills/deleteBill',
+  async (billId: string, { getState, rejectWithValue }) => {
+    try {
+      const headers = getAuthHeaders(getState() as RootState);
+      const response = await fetch(`${API_URL}/bills/${billId}`, {
+        method: 'DELETE',
+        headers
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        return rejectWithValue(data.error || 'Failed to delete bill');
+      }
+      return billId;
+    } catch (err: any) {
+      return rejectWithValue(err.message || 'Server connection failed');
+    }
+  }
+);
+
 const billSlice = createSlice({
   name: 'bills',
   initialState,
@@ -157,6 +178,22 @@ const billSlice = createSlice({
         state.currentBill = action.payload;
       })
       .addCase(fetchBillDetails.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload as string;
+      })
+      // Delete Bill
+      .addCase(deleteBill.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(deleteBill.fulfilled, (state, action) => {
+        state.loading = false;
+        state.items = state.items.filter((b) => b.id !== action.payload);
+        if (state.currentBill && state.currentBill.id === action.payload) {
+          state.currentBill = null;
+        }
+      })
+      .addCase(deleteBill.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload as string;
       });
