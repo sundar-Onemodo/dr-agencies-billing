@@ -45,6 +45,12 @@ exports.register = async (req, res) => {
  * POST /auth/login
  */
 exports.login = async (req, res) => {
+  console.log('CHECK RES:', res);
+  console.log('CHECK REQ:', req);
+  console.log('CHECK body:', req.body);
+  console.log('CHECK Header:', req.header);
+
+  
   const { email, password } = req.body;
 
   if (!email || !password) {
