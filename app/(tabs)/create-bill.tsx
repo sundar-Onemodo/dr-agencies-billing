@@ -146,12 +146,16 @@ export default function CreateBillScreen() {
     return match ? parseInt(match[1], 10) : 18;
   };
 
-  const totalGst = items.reduce((sum, item) => {
+  const groupedGst: Record<number, number> = {};
+  items.forEach((item) => {
     const itemGstRate = item.gstRate !== undefined ? item.gstRate : parseGstRateFromName(item.name);
     const itemGst = gstEnabled ? item.amount * (itemGstRate / 100) : 0;
-    return sum + itemGst;
-  }, 0);
+    if (itemGst > 0) {
+      groupedGst[itemGstRate] = (groupedGst[itemGstRate] || 0) + itemGst;
+    }
+  });
 
+  const totalGst = Object.values(groupedGst).reduce((sum, val) => sum + val, 0);
   const cgst = totalGst / 2;
   const sgst = totalGst / 2;
   const total = subtotal + totalGst;
@@ -696,12 +700,12 @@ export default function CreateBillScreen() {
               </View>
             )}
 
-            {gstEnabled && (
-              <View style={styles.summaryRow}>
-                <Text style={styles.taxLabel}>Total GST</Text>
-                <Text style={styles.taxValue}>{formatCurrency(totalGst)}</Text>
+            {gstEnabled && Object.entries(groupedGst).map(([rate, amt]) => (
+              <View key={rate} style={styles.summaryRow}>
+                <Text style={styles.taxLabel}>GST ({rate}%)</Text>
+                <Text style={styles.taxValue}>{formatCurrency(amt)}</Text>
               </View>
-            )}
+            ))}
 
             <View style={styles.totalDivider} />
             <View style={styles.summaryRow}>

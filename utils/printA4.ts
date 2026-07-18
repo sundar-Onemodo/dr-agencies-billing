@@ -153,6 +153,7 @@ export const printA4Invoice = async (bill: Bill, companySettings: CompanySetting
 
   // Generate table rows for items
   let totalGst = 0;
+  const groupedGst: Record<number, number> = {};
   const itemsHtml = bill.items.map((item, index) => {
     const { name, hsn, gstRate } = parseItemNameAndHsn(item.name);
 
@@ -160,7 +161,10 @@ export const printA4Invoice = async (bill: Bill, companySettings: CompanySetting
     const itemSubtotal = item.amount || (item.qty * item.price);
     const itemGstVal = bill.gstEnabled ? (itemSubtotal * (gstRate / 100)) : 0;
     totalGst += itemGstVal;
-    const itemTotalAmt = itemSubtotal + itemGstVal;
+
+    if (itemGstVal > 0) {
+      groupedGst[gstRate] = (groupedGst[gstRate] || 0) + itemGstVal;
+    }
 
     const gstDisplay = bill.gstEnabled
       ? `₹${itemGstVal.toFixed(2)} (${gstRate}%)`
@@ -176,7 +180,7 @@ export const printA4Invoice = async (bill: Bill, companySettings: CompanySetting
         <td style="text-align: center;">${item.qty}</td>
         <td style="text-align: right;">₹${item.price.toFixed(2)}</td>
         <td style="text-align: right;">${gstDisplay}</td>
-        <td style="text-align: right;">₹${itemTotalAmt.toFixed(2)}</td>
+        <td style="text-align: right;">₹${itemSubtotal.toFixed(2)}</td>
       </tr>
     `;
   }).join('');
@@ -189,6 +193,13 @@ export const printA4Invoice = async (bill: Bill, companySettings: CompanySetting
   const spacerHeight = Math.max(50, 300 - (numItems * 35));
 
   const amountInWords = numberToWords(bill.total);
+
+  const gstRowsHtml = bill.gstEnabled ? Object.entries(groupedGst).map(([rate, amt]) => `
+    <div class="amounts-row">
+      <span>GST (${rate}%):</span>
+      <span style="font-weight: bold;">${formatCurrencyVal(amt)}</span>
+    </div>
+  `).join('') : '';
 
   const htmlContent = `
     <!DOCTYPE html>
@@ -583,7 +594,7 @@ export const printA4Invoice = async (bill: Bill, companySettings: CompanySetting
               <td style="text-align: center;">${totalQty}</td>
               <td></td>
               <td style="text-align: right;">₹${totalGst.toFixed(2)}</td>
-              <td style="text-align: right;">${formatCurrencyVal(bill.total)}</td>
+              <td style="text-align: right;">${formatCurrencyVal(subtotal)}</td>
             </tr>
           </tbody>
         </table>
@@ -598,8 +609,9 @@ export const printA4Invoice = async (bill: Bill, companySettings: CompanySetting
             <td class="amounts-box">
               <div class="amounts-row">
                 <span>Sub Total:</span>
-                <span style="font-weight: bold;">${formatCurrencyVal(bill.total)}</span>
+                <span style="font-weight: bold;">${formatCurrencyVal(subtotal)}</span>
               </div>
+              ${gstRowsHtml}
               <div class="amounts-row bold-row">
                 <span>Total:</span>
                 <span>${formatCurrencyVal(bill.total)}</span>

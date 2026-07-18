@@ -103,11 +103,17 @@ export default function BillPreviewScreen() {
   const subtotal = bill?.subtotal || 0;
   const totalQty = bill?.items.reduce((sum, item) => sum + item.qty, 0) || 0;
   
-  const totalGst = bill?.items.reduce((sum, item) => {
+  const groupedGst: Record<number, number> = {};
+  bill?.items.forEach((item) => {
     const { gstRate } = parseItemNameAndHsn(item.name);
     const itemSubtotal = item.amount || (item.qty * item.price);
-    return sum + (bill.gstEnabled ? (itemSubtotal * (gstRate / 100)) : 0);
-  }, 0) || 0;
+    const itemGstVal = bill.gstEnabled ? (itemSubtotal * (gstRate / 100)) : 0;
+    if (itemGstVal > 0) {
+      groupedGst[gstRate] = (groupedGst[gstRate] || 0) + itemGstVal;
+    }
+  });
+
+  const totalGst = Object.values(groupedGst).reduce((sum, val) => sum + val, 0);
 
   const getCompanyInitials = (name: string): string => {
     if (!name) return 'DR';
@@ -544,7 +550,7 @@ Thank you for doing business!
                         <Text style={styles.a4TdText} numberOfLines={1}>{gstText}</Text>
                       </View>
                       <View style={[styles.a4GridTd, { width: '12%', alignItems: 'flex-end', borderRightWidth: 0 }]}>
-                        <Text style={styles.a4TdText}>₹{itemTotalAmt.toFixed(2)}</Text>
+                        <Text style={styles.a4TdText}>₹{itemSubtotal.toFixed(2)}</Text>
                       </View>
                     </View>
                   );
@@ -574,7 +580,7 @@ Thank you for doing business!
                     <Text style={styles.a4TotalRowTextBold} numberOfLines={1}>₹{totalGst.toFixed(2)}</Text>
                   </View>
                   <View style={{ width: '12%', paddingHorizontal: 4, alignItems: 'flex-end', justifyContent: 'center' }}>
-                    <Text style={styles.a4TotalRowTextBold} numberOfLines={1}>₹{bill.total.toFixed(2)}</Text>
+                    <Text style={styles.a4TotalRowTextBold} numberOfLines={1}>₹{subtotal.toFixed(2)}</Text>
                   </View>
                 </View>
 
@@ -587,8 +593,14 @@ Thank you for doing business!
                   <View style={styles.a4AmountsBox}>
                     <View style={styles.a4AmountRow}>
                       <Text style={styles.a4AmountLabel}>Sub Total:</Text>
-                      <Text style={styles.a4AmountValue}>₹{bill.total.toFixed(2)}</Text>
+                      <Text style={styles.a4AmountValue}>₹{subtotal.toFixed(2)}</Text>
                     </View>
+                    {bill.gstEnabled && Object.entries(groupedGst).map(([rate, amt]) => (
+                      <View key={rate} style={styles.a4AmountRow}>
+                        <Text style={styles.a4AmountLabel}>GST ({rate}%):</Text>
+                        <Text style={styles.a4AmountValue}>₹{amt.toFixed(2)}</Text>
+                      </View>
+                    ))}
                     <View style={styles.a4AmountRowDivider} />
                     <View style={styles.a4AmountRow}>
                       <Text style={[styles.a4AmountLabel, { fontWeight: '700' }]}>Total:</Text>
@@ -674,12 +686,12 @@ Thank you for doing business!
                 <Text style={styles.receiptText}>{bill.subtotal.toFixed(2)}</Text>
               </View>
 
-              {bill.gstEnabled && (
-                <View style={styles.receiptCalcRow}>
-                  <Text style={styles.receiptText}>Total GST:</Text>
-                  <Text style={styles.receiptText}>{totalGst.toFixed(2)}</Text>
+              {bill.gstEnabled && Object.entries(groupedGst).map(([rate, amt]) => (
+                <View key={rate} style={styles.receiptCalcRow}>
+                  <Text style={styles.receiptText}>GST ({rate}%):</Text>
+                  <Text style={styles.receiptText}>{amt.toFixed(2)}</Text>
                 </View>
-              )}
+              ))}
 
               {renderDivider()}
               <View style={styles.receiptCalcRow}>
