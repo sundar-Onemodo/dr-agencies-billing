@@ -50,6 +50,10 @@ export default function CreateBillScreen() {
   
   // GST Toggle State
   const [gstEnabled, setGstEnabled] = useState(true);
+  
+  // Payment Status State
+  const [paymentStatus, setPaymentStatus] = useState<'Paid' | 'Pending'>('Pending');
+  const [paymentMode, setPaymentMode] = useState<'Cash' | 'GPay' | 'PhonePe' | 'Paytm'>('Cash');
 
   // Load Initial Info
   useEffect(() => {
@@ -171,6 +175,8 @@ export default function CreateBillScreen() {
       cgst,
       sgst,
       total,
+      paymentStatus,
+      paymentMode: paymentStatus === 'Paid' ? paymentMode : undefined,
     };
 
     try {
@@ -186,6 +192,8 @@ export default function CreateBillScreen() {
             setCustomerGstin('');
             setCustomerState('Tamil Nadu');
             setItems([]);
+            setPaymentStatus('Pending');
+            setPaymentMode('Cash');
             setInvoiceNo(generateNextInvoiceNumber());
           },
         },
@@ -224,6 +232,8 @@ export default function CreateBillScreen() {
       cgst,
       sgst,
       total,
+      paymentStatus,
+      paymentMode: paymentStatus === 'Paid' ? paymentMode : undefined,
     };
 
     router.push({
@@ -635,6 +645,48 @@ export default function CreateBillScreen() {
               />
             </View>
 
+            {/* Payment Status Toggle */}
+            <View style={styles.gstToggleRow}>
+              <View>
+                <Text style={styles.gstToggleTitle}>Payment Status (Paid / Pending)</Text>
+                <Text style={styles.gstToggleDesc}>Toggle ON if customer paid at billing time</Text>
+              </View>
+              <Switch
+                value={paymentStatus === 'Paid'}
+                onValueChange={(val) => setPaymentStatus(val ? 'Paid' : 'Pending')}
+                trackColor={{ false: '#303038', true: '#34C759' }}
+                thumbColor={paymentStatus === 'Paid' ? '#FFFFFF' : '#A0A0B0'}
+              />
+            </View>
+
+            {/* Payment Mode Selector */}
+            {paymentStatus === 'Paid' && (
+              <View style={styles.paymentModeSection}>
+                <Text style={styles.paymentModeLabel}>Payment Mode</Text>
+                <View style={styles.paymentModeContainer}>
+                  {(['Cash', 'GPay', 'PhonePe', 'Paytm'] as const).map((mode) => (
+                    <TouchableOpacity
+                      key={mode}
+                      style={[
+                        styles.paymentModeBtn,
+                        paymentMode === mode && styles.paymentModeBtnActive
+                      ]}
+                      onPress={() => setPaymentMode(mode)}
+                    >
+                      <Text
+                        style={[
+                          styles.paymentModeBtnText,
+                          paymentMode === mode && styles.paymentModeBtnTextActive
+                        ]}
+                      >
+                        {mode}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            )}
+
             {gstEnabled && (
               <>
                 <View style={styles.summaryRow}>
@@ -988,7 +1040,43 @@ const styles = StyleSheet.create({
   },
   btnSecondaryText: {
     color: '#D4AF37',
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '700',
+  },
+  paymentModeSection: {
+    marginVertical: 10,
+  },
+  paymentModeLabel: {
+    color: '#A0A0B0',
+    fontSize: 13,
+    fontWeight: '600',
+    marginBottom: 8,
+    marginLeft: 4,
+  },
+  paymentModeContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#1c1c24',
+    borderRadius: 12,
+    padding: 4,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.06)',
+    gap: 6,
+  },
+  paymentModeBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: 'center',
+    borderRadius: 8,
+  },
+  paymentModeBtnActive: {
+    backgroundColor: '#D4AF37',
+  },
+  paymentModeBtnText: {
+    color: '#A0A0B0',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  paymentModeBtnTextActive: {
+    color: '#191820',
   },
 });

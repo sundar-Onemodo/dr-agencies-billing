@@ -1,5 +1,5 @@
-import * as Print from 'expo-print';
 import { Bill, CompanySettings } from '@/context/BillingContext';
+import * as Print from 'expo-print';
 import { parseCustomerInfo } from './customer';
 
 /**
@@ -58,32 +58,32 @@ const numberToWords = (num: number): string => {
   const convert = (n: number): string => {
     if (n === 0) return 'Zero';
     let str = '';
-    
+
     // Crore
     const crore = Math.floor(n / 10000000);
     n %= 10000000;
     if (crore > 0) {
       str += convertLessThanOneThousand(crore) + ' Crore ';
     }
-    
+
     // Lakh
     const lakh = Math.floor(n / 100000);
     n %= 100000;
     if (lakh > 0) {
       str += convertLessThanOneThousand(lakh) + ' Lakh ';
     }
-    
+
     // Thousand
     const thousand = Math.floor(n / 1000);
     n %= 1000;
     if (thousand > 0) {
       str += convertLessThanOneThousand(thousand) + ' Thousand ';
     }
-    
+
     if (n > 0) {
       str += convertLessThanOneThousand(n) + ' ';
     }
-    
+
     return str.trim();
   };
 
@@ -98,7 +98,7 @@ const numberToWords = (num: number): string => {
 export const printA4Invoice = async (bill: Bill, companySettings: CompanySettings) => {
   const customer = parseCustomerInfo(bill.customerName);
   const initials = getCompanyInitials(companySettings.name || 'KM');
-  
+
   const extractPhone = (addressStr: string) => {
     const phoneMatch = addressStr.match(/\b\d{10}\b/);
     return phoneMatch ? phoneMatch[0] : '';
@@ -130,7 +130,7 @@ export const printA4Invoice = async (bill: Bill, companySettings: CompanySetting
   const cgst = bill.cgst || 0;
   const sgst = bill.sgst || 0;
   const totalGst = cgst + sgst;
-  
+
   const cgstRate = subtotal > 0 ? ((cgst / subtotal) * 100) : 9.0;
   const sgstRate = subtotal > 0 ? ((sgst / subtotal) * 100) : 9.0;
   const totalGstRate = cgstRate + sgstRate;
@@ -147,14 +147,14 @@ export const printA4Invoice = async (bill: Bill, companySettings: CompanySetting
   // Generate table rows for items
   const itemsHtml = bill.items.map((item, index) => {
     const { name, hsn } = parseItemNameAndHsn(item.name);
-    
+
     // Calculate dynamic per-item GST and total amount
     const itemSubtotal = item.amount || (item.qty * item.price);
     const itemGstVal = bill.gstEnabled ? (itemSubtotal * (totalGstRate / 100)) : 0;
     const itemTotalAmt = itemSubtotal + itemGstVal;
-    
-    const gstDisplay = bill.gstEnabled 
-      ? `₹${itemGstVal.toFixed(2)} (${totalGstRate.toFixed(0)}%)` 
+
+    const gstDisplay = bill.gstEnabled
+      ? `₹${itemGstVal.toFixed(2)} (${totalGstRate.toFixed(0)}%)`
       : '₹0.00 (0%)';
 
     return `
@@ -194,7 +194,7 @@ export const printA4Invoice = async (bill: Bill, companySettings: CompanySetting
         body {
           font-family: 'Outfit', sans-serif;
           margin: 0;
-          padding: 10px;
+          padding: 20px 30px; /* Healthy print margins to prevent page edge cutoff */
           color: #000000;
           background-color: #ffffff;
           box-sizing: border-box;
@@ -206,6 +206,23 @@ export const printA4Invoice = async (bill: Bill, companySettings: CompanySetting
           margin: auto;
           border: 1px solid #000000;
           box-sizing: border-box;
+          position: relative;
+          overflow: hidden;
+        }
+
+        .watermark {
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%) rotate(-30deg);
+          font-size: 55px;
+          font-weight: 900;
+          color: rgba(0, 0, 0, 0.05);
+          text-transform: uppercase;
+          letter-spacing: 5px;
+          pointer-events: none;
+          z-index: 0;
+          white-space: nowrap;
         }
 
         .invoice-title {
@@ -308,6 +325,7 @@ export const printA4Invoice = async (bill: Bill, companySettings: CompanySetting
         .items-table {
           width: 100%;
           border-collapse: collapse;
+          table-layout: fixed; /* Enforces strict column widths and prevents table overflow */
         }
 
         .items-table th {
@@ -466,6 +484,8 @@ export const printA4Invoice = async (bill: Bill, companySettings: CompanySetting
       <h2 class="invoice-title">Tax Invoice</h2>
 
       <div class="invoice-box">
+        <!-- Watermark background overlay -->
+        <div class="watermark">DR AGENCIES</div>
         <!-- Header -->
         <table class="header-table">
           <tr>
@@ -484,9 +504,9 @@ export const printA4Invoice = async (bill: Bill, companySettings: CompanySetting
                 <div class="company-info">
                   <h1 class="company-name">${companySettings.name}</h1>
                   <div class="company-subtext">${companySettings.address}</div>
-                  <div class="company-subtext">Email: ${companySettings.email || 'krishnamarketingagency6@gmail.com'}</div>
+                  <div class="company-subtext">Email: ${companySettings.email || 'dragencies6250@gmail.com'}</div>
                   <div class="company-subtext" style="font-weight: bold;">GSTIN: ${companySettings.gstin}</div>
-                  <div class="company-subtext">State: 33-Tamil Nadu</div>
+                  <div class="company-subtext">Phone No: +91 ${companySettings.phone}</div>
                 </div>
               </div>
             </td>
@@ -528,13 +548,13 @@ export const printA4Invoice = async (bill: Bill, companySettings: CompanySetting
           <thead>
             <tr>
               <th style="width: 5%;">#</th>
-              <th style="width: 40%; text-align: left;">Item name</th>
+              <th style="width: 30%; text-align: left;">Item name</th>
               <th style="width: 12%;">HSN/ SAC</th>
               <th style="width: 8%;">Quantity</th>
-              <th style="width: 8%;">Unit</th>
+              <th style="width: 7%;">Unit</th>
               <th style="width: 12%; text-align: right;">Price/ Unit</th>
-              <th style="width: 25%; text-align: right;">GST</th>
-              <th style="width: 15%; text-align: right;">Amount</th>
+              <th style="width: 14%; text-align: right;">GST</th>
+              <th style="width: 12%; text-align: right;">Amount</th>
             </tr>
           </thead>
           <tbody>

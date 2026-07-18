@@ -440,6 +440,11 @@ Thank you for doing business!
 
               {/* Boxed Border Wrapper */}
               <View style={styles.a4BoxedContainer}>
+                {/* Watermark Overlay */}
+                <View style={styles.a4WatermarkContainer} pointerEvents="none">
+                  <Text style={styles.a4WatermarkText}>DR AGENCIES</Text>
+                </View>
+
                 {/* Header Table */}
                 <View style={styles.a4HeaderContainer}>
                   {/* Left Column: Seller Details */}
@@ -963,6 +968,26 @@ const styles = StyleSheet.create({
     borderColor: '#000000',
     width: '100%',
     backgroundColor: '#FFFFFF',
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  a4WatermarkContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 0,
+  },
+  a4WatermarkText: {
+    fontSize: 42,
+    fontWeight: '900',
+    color: 'rgba(0, 0, 0, 0.04)',
+    transform: [{ rotate: '-30deg' }],
+    letterSpacing: 4,
+    textTransform: 'uppercase',
   },
   a4HeaderContainer: {
     flexDirection: 'row',

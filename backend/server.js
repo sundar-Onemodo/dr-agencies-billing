@@ -7,6 +7,7 @@ const storeRoutes = require('./routes/storeRoutes');
 const productRoutes = require('./routes/productRoutes');
 const billRoutes = require('./routes/billRoutes');
 const reportRoutes = require('./routes/reportRoutes');
+const customerRoutes = require('./routes/customerRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -29,6 +30,7 @@ app.use('/store', storeRoutes);
 app.use('/products', productRoutes);
 app.use('/bills', billRoutes);
 app.use('/reports', reportRoutes);
+app.use('/customers', customerRoutes);
 
 // Health check endpoint
 app.get('/', (req, res) => {

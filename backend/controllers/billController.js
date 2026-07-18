@@ -67,7 +67,74 @@ exports.createBill = async (req, res) => {
       }
     }
 
-    // 3. Insert the main bill
+    // 3. Find or create customer and associate it
+    let name = finalCustomerName;
+    let address = '';
+    let gstin = '';
+    let state = 'Tamil Nadu';
+    if (finalCustomerName.includes('||')) {
+      const parts = finalCustomerName.split('||');
+      name = parts[0] || '';
+      address = parts[1] || '';
+      gstin = parts[2] || '';
+      state = parts[3] || 'Tamil Nadu';
+    }
+
+    let customerId = null;
+    const finalPaymentStatus = req.body.paymentStatus || req.body.payment_status || 'Pending';
+
+    try {
+      const { data: existingCustomer, error: findError } = await supabase
+        .from('customers')
+        .select('id')
+        .eq('user_id', req.user.id)
+        .eq('name', name.trim())
+        .maybeSingle();
+
+      if (findError) {
+        console.error('Error finding customer:', findError);
+      }
+
+      if (!findError && existingCustomer) {
+        customerId = existingCustomer.id;
+        
+        // Update customer details if they changed
+        const { error: updateError } = await supabase
+          .from('customers')
+          .update({ address, gstin, state, updated_at: new Date().toISOString() })
+          .eq('id', customerId);
+
+        if (updateError) {
+          console.error('Error updating customer:', updateError);
+        }
+      } else {
+        // Create new customer record
+        const { data: newCustomer, error: insertError } = await supabase
+          .from('customers')
+          .insert({
+            user_id: req.user.id,
+            name: name.trim(),
+            address,
+            gstin,
+            state,
+            total_received: 0.00
+          })
+          .select()
+          .single();
+
+        if (insertError) {
+          console.error('Error inserting customer:', insertError);
+        }
+
+        if (!insertError && newCustomer) {
+          customerId = newCustomer.id;
+        }
+      }
+    } catch (custErr) {
+      console.error('Error in customer creation / lookup:', custErr);
+    }
+
+    // Insert the main bill
     const billData = {
       user_id: req.user.id,
       invoice_number: finalInvoiceNumber,
@@ -75,7 +142,9 @@ exports.createBill = async (req, res) => {
       subtotal: parseFloat(subtotal),
       cgst: parseFloat(cgst || 0),
       sgst: parseFloat(sgst || 0),
-      total: parseFloat(total)
+      total: parseFloat(total),
+      customer_id: customerId,
+      payment_status: finalPaymentStatus
     };
 
     const { data: bill, error: billError } = await supabase
@@ -182,6 +251,38 @@ exports.createBill = async (req, res) => {
       });
     }
 
+    // 5.5 If payment status is Paid, record the payment log and update customer balance
+    if (bill.customer_id && finalPaymentStatus === 'Paid') {
+      try {
+        await supabase
+          .from('customer_payments')
+          .insert({
+            user_id: req.user.id,
+            customer_id: bill.customer_id,
+            bill_id: bill.id,
+            amount: parseFloat(bill.total),
+            payment_mode: req.body.paymentMode || req.body.payment_mode || 'Cash',
+            payment_date: bill.created_at
+          });
+
+        const { data: customer } = await supabase
+          .from('customers')
+          .select('total_received')
+          .eq('id', bill.customer_id)
+          .single();
+
+        if (customer) {
+          const newReceived = parseFloat(customer.total_received || 0) + parseFloat(bill.total);
+          await supabase
+            .from('customers')
+            .update({ total_received: newReceived, updated_at: new Date().toISOString() })
+            .eq('id', bill.customer_id);
+        }
+      } catch (custErr) {
+        console.error('Error recording payment log for Paid bill:', custErr);
+      }
+    }
+
     // 6. Return the fully saved invoice with nested items
     return res.status(201).json({
       success: true,
@@ -195,6 +296,8 @@ exports.createBill = async (req, res) => {
         cgst: parseFloat(bill.cgst),
         sgst: parseFloat(bill.sgst),
         total: parseFloat(bill.total),
+        paymentStatus: bill.payment_status || 'Pending',
+        customerId: bill.customer_id ? String(bill.customer_id) : null,
         gstEnabled: (parseFloat(bill.cgst) > 0 || parseFloat(bill.sgst) > 0),
         items: insertedItems.map(item => ({
           id: String(item.id),
@@ -217,8 +320,9 @@ exports.createBill = async (req, res) => {
  * GET /bills/recent
  */
 exports.getRecentBills = async (req, res) => {
+  const { from, to } = req.query;
   try {
-    const { data, error } = await supabase
+    let query = supabase
       .from('bills')
       .select(`
         *,
@@ -226,9 +330,21 @@ exports.getRecentBills = async (req, res) => {
           *
         )
       `)
-      .eq('user_id', req.user.id)
-      .order('created_at', { ascending: false })
-      .limit(10);
+      .eq('user_id', req.user.id);
+
+    if (from && to) {
+      const fromDate = new Date(`${from}T00:00:00.000Z`).toISOString();
+      const toDate = new Date(`${to}T23:59:59.999Z`).toISOString();
+      query = query.gte('created_at', fromDate).lte('created_at', toDate);
+    }
+
+    query = query.order('created_at', { ascending: false });
+
+    if (!from || !to) {
+      query = query.limit(10);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       return res.status(400).json({ error: error.message });
@@ -243,6 +359,8 @@ exports.getRecentBills = async (req, res) => {
       cgst: parseFloat(bill.cgst),
       sgst: parseFloat(bill.sgst),
       total: parseFloat(bill.total),
+      paymentStatus: bill.payment_status || 'Pending',
+      customerId: bill.customer_id ? String(bill.customer_id) : null,
       gstEnabled: (parseFloat(bill.cgst) > 0 || parseFloat(bill.sgst) > 0),
       items: (bill.bill_items || []).map(item => ({
         id: String(item.id),
@@ -301,6 +419,8 @@ exports.getBillById = async (req, res) => {
       cgst: parseFloat(data.cgst),
       sgst: parseFloat(data.sgst),
       total: parseFloat(data.total),
+      paymentStatus: data.payment_status || 'Pending',
+      customerId: data.customer_id ? String(data.customer_id) : null,
       gstEnabled: (parseFloat(data.cgst) > 0 || parseFloat(data.sgst) > 0),
       items: (data.bill_items || []).map(item => ({
         id: String(item.id),
@@ -349,6 +469,27 @@ exports.deleteBill = async (req, res) => {
 
     if (!bill) {
       return res.status(404).json({ error: 'Invoice not found or unauthorized.' });
+    }
+
+    // Deduct from customer's total received if deleted bill was Paid
+    if (bill.customer_id && bill.payment_status === 'Paid') {
+      try {
+        const { data: customer } = await supabase
+          .from('customers')
+          .select('total_received')
+          .eq('id', bill.customer_id)
+          .single();
+
+        if (customer) {
+          const newReceived = Math.max(0, parseFloat(customer.total_received || 0) - parseFloat(bill.total));
+          await supabase
+            .from('customers')
+            .update({ total_received: newReceived, updated_at: new Date().toISOString() })
+            .eq('id', bill.customer_id);
+        }
+      } catch (custErr) {
+        console.error('Error reverting customer payment on delete:', custErr);
+      }
     }
 
     // 2. Restore stock for each item that has a product_id

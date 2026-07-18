@@ -77,14 +77,11 @@ export default function DashboardScreen() {
     );
   });
   
-  // If no bills for "today" in the mock, fallback to sum of all bills for visualization, 
-  // but prioritize showing actual today bills if user added one.
-  const displayBills = todayBills.length > 0 ? todayBills : bills;
-  const todaySalesVal = displayBills.reduce((sum, b) => sum + b.total, 0);
-  const todayBillsCount = displayBills.length;
+  const todaySalesVal = todayBills.reduce((sum, b) => sum + b.total, 0);
+  const todayBillsCount = todayBills.length;
   
-  // Labels indicating whether it's showing all-time fallback or today's active items
-  const statsLabel = todayBills.length > 0 ? "Today's Summary" : "Overall Summary (Demo)";
+  // Label for today's summary metrics
+  const statsLabel = "Today's Summary";
 
   // Navigation handlers
   const handleQuickAction = (tabName: 'create-bill' | 'products' | 'reports' | 'settings') => {

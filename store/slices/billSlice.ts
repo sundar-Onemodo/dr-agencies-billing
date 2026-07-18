@@ -22,6 +22,8 @@ export interface Bill {
   cgst: number;
   sgst: number;
   total: number;
+  paymentStatus?: string;
+  customerId?: string | null;
 }
 
 interface BillState {
@@ -48,10 +50,14 @@ const getAuthHeaders = (state: RootState) => {
 
 export const fetchRecentBills = createAsyncThunk(
   'bills/fetchRecentBills',
-  async (_, { getState, rejectWithValue }) => {
+  async (params: { from?: string; to?: string } | undefined, { getState, rejectWithValue }) => {
     try {
       const headers = getAuthHeaders(getState() as RootState);
-      const response = await fetch(`${API_URL}/bills/recent`, { headers });
+      let url = `${API_URL}/bills/recent`;
+      if (params?.from && params?.to) {
+        url += `?from=${params.from}&to=${params.to}`;
+      }
+      const response = await fetch(url, { headers });
       const data = await response.json();
 
       if (!response.ok) {

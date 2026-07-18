@@ -19,6 +19,13 @@ import {
 import { 
   updatePrinterSettings as updatePrinterSettingsAction 
 } from '../store/slices/printerSlice';
+import { 
+  fetchCustomers, 
+  updateCustomerPayment, 
+  fetchCustomerPayments,
+  Customer,
+  CustomerPayment
+} from '../store/slices/customerSlice';
 
 export interface Product {
   id: string;
@@ -48,6 +55,8 @@ export interface Bill {
   cgst: number;
   sgst: number;
   total: number;
+  paymentStatus?: string;
+  customerId?: string | null;
 }
 
 export interface CompanySettings {
@@ -85,6 +94,12 @@ interface BillingContextType {
   printerSettings: PrinterSettings;
   updatePrinterSettings: (settings: Partial<PrinterSettings>) => void;
   generateNextInvoiceNumber: () => string;
+  customers: Customer[];
+  fetchCustomersList: () => Promise<void>;
+  recordCustomerPayment: (id: string, amount: number, paymentMode: string, paymentDate?: string) => Promise<void>;
+  fetchCustomerPaymentsList: (customerId: string) => Promise<CustomerPayment[]>;
+  customerPayments: Record<string, CustomerPayment[]>;
+  fetchBillsRange: (from: string, to: string) => Promise<void>;
 }
 
 const BillingContext = createContext<BillingContextType | undefined>(undefined);
@@ -99,6 +114,8 @@ export const BillingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const bills = useAppSelector((state) => state.bills.items);
   const companySettings = useAppSelector((state) => state.store.profile);
   const printerSettings = useAppSelector((state) => state.printer);
+  const customers = useAppSelector((state) => state.customers.items);
+  const customerPayments = useAppSelector((state) => state.customers.payments);
 
   // Fetch initial auth state from storage
   useEffect(() => {
@@ -111,6 +128,7 @@ export const BillingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       dispatch(fetchProducts());
       dispatch(fetchStoreProfile());
       dispatch(fetchRecentBills());
+      dispatch(fetchCustomers());
     }
   }, [isAuthenticated, dispatch]);
 
@@ -178,8 +196,9 @@ export const BillingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       throw new Error(resultAction.payload as string || 'Failed to create bill');
     }
     
-    // Automatically refresh products list to reflect updated stock in UI
+    // Automatically refresh products and customers list to reflect updated stock/ledger in UI
     dispatch(fetchProducts());
+    dispatch(fetchCustomers());
     
     return nextInvoiceId;
   };
@@ -189,8 +208,33 @@ export const BillingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (deleteBillThunk.rejected.match(resultAction)) {
       throw new Error(resultAction.payload as string || 'Failed to delete bill');
     }
-    // Automatically refresh products list to reflect updated stock in UI
+    // Automatically refresh products and customers list to reflect updated stock/ledger in UI
     dispatch(fetchProducts());
+    dispatch(fetchCustomers());
+  };
+
+  const fetchCustomersList = async (): Promise<void> => {
+    await dispatch(fetchCustomers());
+  };
+
+  const recordCustomerPayment = async (customerId: string, amount: number, paymentMode: string, paymentDate?: string): Promise<void> => {
+    const resultAction = await dispatch(updateCustomerPayment({ id: customerId, amount, paymentMode, paymentDate }));
+    if (updateCustomerPayment.rejected.match(resultAction)) {
+      throw new Error(resultAction.payload as string || 'Failed to update customer payment');
+    }
+    dispatch(fetchCustomers());
+  };
+
+  const fetchCustomerPaymentsList = async (customerId: string): Promise<CustomerPayment[]> => {
+    const resultAction = await dispatch(fetchCustomerPayments(customerId));
+    if (fetchCustomerPayments.rejected.match(resultAction)) {
+      throw new Error(resultAction.payload as string || 'Failed to fetch customer payments');
+    }
+    return (resultAction.payload as any).payments as CustomerPayment[];
+  };
+
+  const fetchBillsRange = async (from: string, to: string): Promise<void> => {
+    await dispatch(fetchRecentBills({ from, to }));
   };
 
   const updateCompanySettings = (settings: CompanySettings) => {
@@ -220,6 +264,12 @@ export const BillingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         printerSettings,
         updatePrinterSettings,
         generateNextInvoiceNumber,
+        customers,
+        fetchCustomersList,
+        recordCustomerPayment,
+        fetchCustomerPaymentsList,
+        customerPayments,
+        fetchBillsRange,
       }}
     >
       {children}

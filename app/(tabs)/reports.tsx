@@ -8,19 +8,72 @@ import {
   SafeAreaView,
   Platform,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
+import { DateRangePickerModal } from '@/components/ui/DateRangePickerModal';
 import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useBilling, Bill } from '@/context/BillingContext';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { parseCustomerInfo } from '@/utils/customer';
 
-type FilterType = 'today' | 'weekly' | 'monthly';
+type FilterType = 'today' | 'weekly' | 'monthly' | 'custom';
 
 export default function ReportsScreen() {
   const router = useRouter();
-  const { bills, deleteBill } = useBilling();
+  const { bills, deleteBill, fetchBillsRange } = useBilling();
   const [activeFilter, setActiveFilter] = useState<FilterType>('monthly'); // Default monthly to show mock data
+  const [showCalendar, setShowCalendar] = useState(false);
+  const [customRange, setCustomRange] = useState<{ start: Date; end: Date } | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  // Fetch bills from server when filter changes
+  React.useEffect(() => {
+    const fetchFilteredData = async () => {
+      try {
+        setLoading(true);
+        const today = new Date();
+        let fromStr = '';
+        let toStr = '';
+
+        const formatDateForApi = (date: Date) => {
+          const yyyy = date.getFullYear();
+          const mm = String(date.getMonth() + 1).padStart(2, '0');
+          const dd = String(date.getDate()).padStart(2, '0');
+          return `${yyyy}-${mm}-${dd}`;
+        };
+
+        if (activeFilter === 'today') {
+          fromStr = formatDateForApi(today);
+          toStr = fromStr;
+        } else if (activeFilter === 'weekly') {
+          const sevenDaysAgo = new Date(today);
+          sevenDaysAgo.setDate(today.getDate() - 7);
+          fromStr = formatDateForApi(sevenDaysAgo);
+          toStr = formatDateForApi(today);
+        } else if (activeFilter === 'monthly') {
+          const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+          fromStr = formatDateForApi(firstDayOfMonth);
+          toStr = formatDateForApi(today);
+        } else if (activeFilter === 'custom' && customRange) {
+          fromStr = formatDateForApi(customRange.start);
+          toStr = formatDateForApi(customRange.end);
+        } else {
+          setLoading(false);
+          return;
+        }
+
+        await fetchBillsRange(fromStr, toStr);
+      } catch (err: any) {
+        console.error('Error fetching bills for reports:', err);
+        Alert.alert('Error', 'Failed to load report data from server');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchFilteredData();
+  }, [activeFilter, customRange]);
 
   const handleDeleteBill = (id: string, invoiceNo: string) => {
     Alert.alert(
@@ -71,36 +124,7 @@ export default function ReportsScreen() {
 
   // Filter bills dynamically
   const getFilteredBills = (): Bill[] => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    return bills.filter((bill) => {
-      const billDate = parseDateString(bill.date);
-      billDate.setHours(0, 0, 0, 0);
-
-      if (activeFilter === 'today') {
-        return (
-          billDate.getDate() === today.getDate() &&
-          billDate.getMonth() === today.getMonth() &&
-          billDate.getFullYear() === today.getFullYear()
-        );
-      }
-
-      if (activeFilter === 'weekly') {
-        const sevenDaysAgo = new Date(today);
-        sevenDaysAgo.setDate(today.getDate() - 7);
-        return billDate >= sevenDaysAgo && billDate <= new Date();
-      }
-
-      if (activeFilter === 'monthly') {
-        return (
-          billDate.getMonth() === today.getMonth() &&
-          billDate.getFullYear() === today.getFullYear()
-        );
-      }
-
-      return true;
-    });
+    return bills;
   };
 
   const filteredBills = getFilteredBills();
@@ -135,12 +159,18 @@ export default function ReportsScreen() {
 
       {/* Filter Tabs Segment */}
       <View style={styles.segmentContainer}>
-        {(['today', 'weekly', 'monthly'] as FilterType[]).map((filter) => (
+        {(['today', 'weekly', 'monthly', 'custom'] as FilterType[]).map((filter) => (
           <TouchableOpacity
             key={filter}
             activeOpacity={0.8}
             style={[styles.segmentBtn, activeFilter === filter && styles.activeSegmentBtn]}
-            onPress={() => setActiveFilter(filter)}
+            onPress={() => {
+              if (filter === 'custom') {
+                setShowCalendar(true);
+              } else {
+                setActiveFilter(filter);
+              }
+            }}
           >
             <Text
               style={[
@@ -148,11 +178,24 @@ export default function ReportsScreen() {
                 activeFilter === filter && styles.activeSegmentBtnText,
               ]}
             >
-              {filter.toUpperCase()}
+              {filter === 'custom' ? 'CUSTOM' : filter.toUpperCase()}
             </Text>
           </TouchableOpacity>
         ))}
       </View>
+
+      {/* Custom Range Indicator */}
+      {activeFilter === 'custom' && customRange && (
+        <View style={styles.rangeIndicator}>
+          <Ionicons name="calendar" size={14} color="#D4AF37" style={{ marginRight: 6 }} />
+          <Text style={styles.rangeIndicatorText}>
+            {formatDateForDisplay(customRange.start.toISOString())} to {formatDateForDisplay(customRange.end.toISOString())}
+          </Text>
+          <TouchableOpacity onPress={() => setShowCalendar(true)} style={styles.editRangeBtn}>
+            <Text style={styles.editRangeText}>Edit</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Dynamic Summary Cards */}
@@ -195,7 +238,12 @@ export default function ReportsScreen() {
           Transaction History ({filteredBills.length} invoices)
         </Text>
 
-        {filteredBills.length === 0 ? (
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#D4AF37" />
+            <Text style={styles.loadingText}>Loading transactions...</Text>
+          </View>
+        ) : filteredBills.length === 0 ? (
           <GlassCard style={styles.emptyCard}>
             <Ionicons name="receipt-outline" size={40} color="#A0A0B0" style={{ marginBottom: 12 }} />
             <Text style={styles.emptyText}>No transactions recorded in this period</Text>
@@ -238,6 +286,15 @@ export default function ReportsScreen() {
           ))
         )}
       </ScrollView>
+
+      <DateRangePickerModal
+        visible={showCalendar}
+        onClose={() => setShowCalendar(false)}
+        onSelectRange={(start, end) => {
+          setCustomRange({ start, end });
+          setActiveFilter('custom');
+        }}
+      />
     </SafeAreaView>
   );
 }
@@ -416,5 +473,43 @@ const styles = StyleSheet.create({
     padding: 8,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  rangeIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(212, 175, 55, 0.08)',
+    marginHorizontal: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 0.5,
+    borderColor: 'rgba(212, 175, 55, 0.2)',
+    marginBottom: 12,
+  },
+  rangeIndicatorText: {
+    color: '#D4AF37',
+    fontSize: 12,
+    fontWeight: '600',
+    flex: 1,
+  },
+  editRangeBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  editRangeText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  loadingContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+  },
+  loadingText: {
+    color: '#A0A0B0',
+    fontSize: 13,
+    fontWeight: '600',
+    marginTop: 12,
   },
 });
