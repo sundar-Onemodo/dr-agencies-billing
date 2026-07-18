@@ -42,6 +42,7 @@ export interface BillItem {
   qty: number;
   price: number;
   amount: number;
+  gstRate?: number;
 }
 
 export interface Bill {

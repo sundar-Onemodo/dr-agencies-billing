@@ -110,13 +110,19 @@ export default function CreateBillScreen() {
     }
 
     const amount = q * p;
+    const gstRateVal = selectedProduct ? selectedProduct.gstRate : 18;
+    const finalItemName = selectedProduct
+      ? `${selectedProduct.name} (GST: ${gstRateVal}%)`
+      : searchQuery.includes('GST:') ? searchQuery : `${searchQuery} (GST: 18%)`;
+
     const newItem: BillItem = {
       id: Date.now().toString(),
       productId: selectedProduct?.id,
-      name: searchQuery,
+      name: finalItemName,
       qty: q,
       price: p,
       amount,
+      gstRate: gstRateVal,
     };
 
     setItems((prev) => [...prev, newItem]);
@@ -134,12 +140,21 @@ export default function CreateBillScreen() {
 
   // Calculations
   const subtotal = items.reduce((sum, item) => sum + item.amount, 0);
-  const cgstRate = 0.09; // 9%
-  const sgstRate = 0.09; // 9%
   
-  const cgst = gstEnabled ? subtotal * cgstRate : 0;
-  const sgst = gstEnabled ? subtotal * sgstRate : 0;
-  const total = subtotal + cgst + sgst;
+  const parseGstRateFromName = (name: string): number => {
+    const match = name.match(/GST:\s*(\d+)%/i);
+    return match ? parseInt(match[1], 10) : 18;
+  };
+
+  const totalGst = items.reduce((sum, item) => {
+    const itemGstRate = item.gstRate !== undefined ? item.gstRate : parseGstRateFromName(item.name);
+    const itemGst = gstEnabled ? item.amount * (itemGstRate / 100) : 0;
+    return sum + itemGst;
+  }, 0);
+
+  const cgst = totalGst / 2;
+  const sgst = totalGst / 2;
+  const total = subtotal + totalGst;
 
   // Format currency helper
   const formatCurrency = (val: number) => {
@@ -376,13 +391,7 @@ export default function CreateBillScreen() {
         await BluetoothEscposPrinter.printColumn(
           is58 ? [16, 16] : [24, 24],
           [BluetoothEscposPrinter.ALIGN.LEFT, BluetoothEscposPrinter.ALIGN.RIGHT],
-          ['CGST (9.0%):', cgst.toFixed(2)],
-          {}
-        );
-        await BluetoothEscposPrinter.printColumn(
-          is58 ? [16, 16] : [24, 24],
-          [BluetoothEscposPrinter.ALIGN.LEFT, BluetoothEscposPrinter.ALIGN.RIGHT],
-          ['SGST (9.0%):', sgst.toFixed(2)],
+          ['Total GST:', totalGst.toFixed(2)],
           {}
         );
       }
@@ -688,16 +697,10 @@ export default function CreateBillScreen() {
             )}
 
             {gstEnabled && (
-              <>
-                <View style={styles.summaryRow}>
-                  <Text style={styles.taxLabel}>CGST (9%)</Text>
-                  <Text style={styles.taxValue}>{formatCurrency(cgst)}</Text>
-                </View>
-                <View style={styles.summaryRow}>
-                  <Text style={styles.taxLabel}>SGST (9%)</Text>
-                  <Text style={styles.taxValue}>{formatCurrency(sgst)}</Text>
-                </View>
-              </>
+              <View style={styles.summaryRow}>
+                <Text style={styles.taxLabel}>Total GST</Text>
+                <Text style={styles.taxValue}>{formatCurrency(totalGst)}</Text>
+              </View>
             )}
 
             <View style={styles.totalDivider} />

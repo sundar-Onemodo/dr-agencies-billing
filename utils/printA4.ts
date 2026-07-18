@@ -7,12 +7,26 @@ import { parseCustomerInfo } from './customer';
  */
 const parseItemNameAndHsn = (name: string) => {
   const hsnMatch = name.match(/(?:HSN\/SAC\s*:\s*|HSN\s*:\s*)(\d+)/i);
+  const gstMatch = name.match(/(?:GST\s*:\s*)(\d+)%/i);
+  let hsn = '';
+  let gstRate = 18;
+  let cleanName = name;
+
   if (hsnMatch) {
-    const hsn = hsnMatch[1] || hsnMatch[0];
-    const cleanName = name.replace(hsnMatch[0], '').replace(/\(\s*\)/g, '').trim();
-    return { name: cleanName, hsn };
+    hsn = hsnMatch[1] || hsnMatch[0];
+    cleanName = cleanName.replace(hsnMatch[0], '');
   }
-  return { name, hsn: '' };
+  if (gstMatch) {
+    gstRate = parseInt(gstMatch[1], 10);
+    cleanName = cleanName.replace(gstMatch[0], '');
+  }
+
+  cleanName = cleanName
+    .replace(/\(\s*\)/g, '')
+    .replace(/,\s*,/g, ',')
+    .trim();
+
+  return { name: cleanName, hsn, gstRate };
 };
 
 /**
@@ -127,13 +141,6 @@ export const printA4Invoice = async (bill: Bill, companySettings: CompanySetting
 
   // Calculate dynamic GST rates if subtotal is available
   const subtotal = bill.subtotal || 0;
-  const cgst = bill.cgst || 0;
-  const sgst = bill.sgst || 0;
-  const totalGst = cgst + sgst;
-
-  const cgstRate = subtotal > 0 ? ((cgst / subtotal) * 100) : 9.0;
-  const sgstRate = subtotal > 0 ? ((sgst / subtotal) * 100) : 9.0;
-  const totalGstRate = cgstRate + sgstRate;
 
   // Format currency in Indian standard (INR)
   const formatCurrencyVal = (val: number) => {
@@ -145,16 +152,18 @@ export const printA4Invoice = async (bill: Bill, companySettings: CompanySetting
   };
 
   // Generate table rows for items
+  let totalGst = 0;
   const itemsHtml = bill.items.map((item, index) => {
-    const { name, hsn } = parseItemNameAndHsn(item.name);
+    const { name, hsn, gstRate } = parseItemNameAndHsn(item.name);
 
     // Calculate dynamic per-item GST and total amount
     const itemSubtotal = item.amount || (item.qty * item.price);
-    const itemGstVal = bill.gstEnabled ? (itemSubtotal * (totalGstRate / 100)) : 0;
+    const itemGstVal = bill.gstEnabled ? (itemSubtotal * (gstRate / 100)) : 0;
+    totalGst += itemGstVal;
     const itemTotalAmt = itemSubtotal + itemGstVal;
 
     const gstDisplay = bill.gstEnabled
-      ? `₹${itemGstVal.toFixed(2)} (${totalGstRate.toFixed(0)}%)`
+      ? `₹${itemGstVal.toFixed(2)} (${gstRate}%)`
       : '₹0.00 (0%)';
 
     return `
@@ -165,7 +174,6 @@ export const printA4Invoice = async (bill: Bill, companySettings: CompanySetting
         </td>
         <td style="text-align: center;">${hsn || '21039040'}</td>
         <td style="text-align: center;">${item.qty}</td>
-        <td style="text-align: center;">Pcs</td>
         <td style="text-align: right;">₹${item.price.toFixed(2)}</td>
         <td style="text-align: right;">${gstDisplay}</td>
         <td style="text-align: right;">₹${itemTotalAmt.toFixed(2)}</td>
@@ -548,12 +556,11 @@ export const printA4Invoice = async (bill: Bill, companySettings: CompanySetting
           <thead>
             <tr>
               <th style="width: 5%;">#</th>
-              <th style="width: 30%; text-align: left;">Item name</th>
+              <th style="width: 35%; text-align: left;">Item name</th>
               <th style="width: 12%;">HSN/ SAC</th>
-              <th style="width: 8%;">Quantity</th>
-              <th style="width: 7%;">Unit</th>
-              <th style="width: 12%; text-align: right;">Price/ Unit</th>
-              <th style="width: 14%; text-align: right;">GST</th>
+              <th style="width: 10%;">Quantity</th>
+              <th style="width: 13%; text-align: right;">Price</th>
+              <th style="width: 13%; text-align: right;">GST</th>
               <th style="width: 12%; text-align: right;">Amount</th>
             </tr>
           </thead>
@@ -568,14 +575,12 @@ export const printA4Invoice = async (bill: Bill, companySettings: CompanySetting
               <td></td>
               <td></td>
               <td></td>
-              <td></td>
             </tr>
             <!-- Total row -->
             <tr class="total-row">
               <td colspan="2" style="text-align: left;">Total</td>
               <td></td>
               <td style="text-align: center;">${totalQty}</td>
-              <td></td>
               <td></td>
               <td style="text-align: right;">₹${totalGst.toFixed(2)}</td>
               <td style="text-align: right;">${formatCurrencyVal(bill.total)}</td>
