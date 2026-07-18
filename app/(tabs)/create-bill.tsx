@@ -160,6 +160,21 @@ export default function CreateBillScreen() {
   const sgst = totalGst / 2;
   const total = subtotal + totalGst;
 
+  // Dynamic GST Toggle Title
+  const currentGstRates: number[] = [];
+  if (items.length > 0) {
+    items.forEach((item) => {
+      currentGstRates.push(item.gstRate !== undefined ? item.gstRate : parseGstRateFromName(item.name));
+    });
+  } else if (selectedProduct) {
+    currentGstRates.push(selectedProduct.gstRate);
+  }
+
+  const uniqueGstRates = Array.from(new Set(currentGstRates)).sort((a, b) => a - b);
+  const gstToggleTitle = uniqueGstRates.length > 0
+    ? `GST (${uniqueGstRates.map(rate => `${rate}%`).join(', ')})`
+    : 'GST';
+
   // Format currency helper
   const formatCurrency = (val: number) => {
     return new Intl.NumberFormat('en-IN', {
@@ -647,7 +662,7 @@ export default function CreateBillScreen() {
             {/* GST Config Toggle */}
             <View style={styles.gstToggleRow}>
               <View>
-                <Text style={styles.gstToggleTitle}>GST (CGST + SGST @ 18%)</Text>
+                <Text style={styles.gstToggleTitle}>{gstToggleTitle}</Text>
                 <Text style={styles.gstToggleDesc}>Toggle ON to apply tax calculations</Text>
               </View>
               <Switch
