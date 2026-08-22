@@ -61,6 +61,7 @@ export default function CreateBillScreen() {
   const [invoiceNo, setInvoiceNo] = useState('');
   const [customerName, setCustomerName] = useState('');
   const [customerAddress, setCustomerAddress] = useState('');
+  const [customerPhone, setCustomerPhone] = useState('');
   const [customerGstin, setCustomerGstin] = useState('');
   const [customerState, setCustomerState] = useState('Tamil Nadu');
   const [billingDate, setBillingDate] = useState('');
@@ -238,11 +239,15 @@ export default function CreateBillScreen() {
       return;
     }
 
+    const finalAddress = customerPhone.trim() 
+      ? `${customerAddress.trim()} ${customerPhone.trim()}` 
+      : customerAddress.trim();
+
     const finalBill = {
       invoiceNumber: invoiceNo,
       customerName: serializeCustomerInfo({
         name: customerName,
-        address: customerAddress,
+        address: finalAddress,
         gstin: customerGstin,
         state: customerState,
       }),
@@ -460,6 +465,7 @@ export default function CreateBillScreen() {
     // Reset Form
     setCustomerName('');
     setCustomerAddress('');
+    setCustomerPhone('');
     setCustomerGstin('');
     setCustomerState('Tamil Nadu');
     setItems([]);
@@ -479,12 +485,16 @@ export default function CreateBillScreen() {
       return;
     }
 
+    const finalAddress = customerPhone.trim() 
+      ? `${customerAddress.trim()} ${customerPhone.trim()}` 
+      : customerAddress.trim();
+
     // Build temporary draft details to display in preview screen
     const draftBill = {
       id: invoiceNo,
       customerName: serializeCustomerInfo({
         name: customerName,
-        address: customerAddress,
+        address: finalAddress,
         gstin: customerGstin,
         state: customerState,
       }),
@@ -515,6 +525,10 @@ export default function CreateBillScreen() {
       return;
     }
 
+    const finalAddress = customerPhone.trim() 
+      ? `${customerAddress.trim()} ${customerPhone.trim()}` 
+      : customerAddress.trim();
+
     if (printerSettings.paperSize === 'A4') {
       try {
         await printA4Invoice({
@@ -522,7 +536,7 @@ export default function CreateBillScreen() {
           invoiceNumber: invoiceNo,
           customerName: serializeCustomerInfo({
             name: customerName,
-            address: customerAddress,
+            address: finalAddress,
             gstin: customerGstin,
             state: customerState,
           }),
@@ -735,6 +749,19 @@ export default function CreateBillScreen() {
               onChangeText={setCustomerAddress}
               iconName="location-outline"
               multiline
+            />
+            <InputField
+              label="Customer Contact No"
+              placeholder="Enter 10-digit phone number"
+              value={customerPhone}
+              onChangeText={(text) => {
+                const sanitized = text.replace(/[^0-9]/g, '');
+                if (sanitized.length <= 10) {
+                  setCustomerPhone(sanitized);
+                }
+              }}
+              keyboardType="phone-pad"
+              iconName="call-outline"
             />
             <View style={styles.inputRow}>
               <View style={{ flex: 1, marginRight: 12 }}>
