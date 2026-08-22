@@ -12,6 +12,8 @@ import {
   Platform,
   SafeAreaView,
   FlatList,
+  Modal,
+  RefreshControl,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -22,7 +24,31 @@ import { InputField } from '@/components/ui/InputField';
 import { BluetoothEscposPrinter } from 'react-native-bluetooth-escpos-printer';
 import { PrinterSimulationModal } from '@/components/ui/PrinterSimulationModal';
 import { serializeCustomerInfo } from '@/utils/customer';
-import { printA4Invoice } from '@/utils/printA4';
+import { printA4Invoice, downloadA4InvoicePdf } from '@/utils/printA4';
+
+const parseItemNameAndHsn = (name: string) => {
+  const hsnMatch = name.match(/(?:HSN\/SAC\s*:\s*|HSN\s*:\s*)(\d+)/i);
+  const gstMatch = name.match(/(?:GST\s*:\s*)(\d+)%/i);
+  let hsn = '';
+  let gstRate = 18;
+  let cleanName = name;
+
+  if (hsnMatch) {
+    hsn = hsnMatch[1] || hsnMatch[0];
+    cleanName = cleanName.replace(hsnMatch[0], '');
+  }
+  if (gstMatch) {
+    gstRate = parseInt(gstMatch[1], 10);
+    cleanName = cleanName.replace(gstMatch[0], '');
+  }
+
+  cleanName = cleanName
+    .replace(/\(\s*\)/g, '')
+    .replace(/,\s*,/g, ',')
+    .trim();
+
+  return { name: cleanName, hsn, gstRate };
+};
 
 export default function CreateBillScreen() {
   const router = useRouter();
@@ -55,6 +81,23 @@ export default function CreateBillScreen() {
   const [paymentStatus, setPaymentStatus] = useState<'Paid' | 'Pending'>('Pending');
   const [paymentMode, setPaymentMode] = useState<'Cash' | 'GPay' | 'PhonePe' | 'Paytm'>('Cash');
 
+  // Post Save Actions Modal States
+  const [showPostSaveModal, setShowPostSaveModal] = useState(false);
+  const [savedBillForActions, setSavedBillForActions] = useState<any>(null);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await refreshData();
+      setInvoiceNo(generateNextInvoiceNumber());
+    } catch (e) {
+      console.warn('Quick Bill refresh failed:', e);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   // Load Initial Info
   useEffect(() => {
     setInvoiceNo(generateNextInvoiceNumber());
@@ -73,7 +116,8 @@ export default function CreateBillScreen() {
 
   const handleSelectProduct = (product: Product) => {
     setSelectedProduct(product);
-    setSearchQuery(product.name);
+    const parsed = parseItemNameAndHsn(product.name);
+    setSearchQuery(parsed.name);
     setPrice(product.price.toString());
     setShowProductDropdown(false);
   };
@@ -83,7 +127,7 @@ export default function CreateBillScreen() {
       Alert.alert('Error', 'Please enter or select a product name');
       return;
     }
-    const q = parseInt(qty, 10);
+    const q = parseFloat(qty);
     const p = parseFloat(price);
 
     if (isNaN(q) || q <= 0) {
@@ -103,7 +147,7 @@ export default function CreateBillScreen() {
       if (existingQty + q > selectedProduct.stockQty) {
         Alert.alert(
           'Insufficient Stock',
-          `Cannot add item. Only ${selectedProduct.stockQty} items are available in stock. You have already added ${existingQty} items to this bill.`
+          `Cannot add item. Only ${selectedProduct.stockQty} kg are available in stock. You have already added ${existingQty} kg to this bill.`
         );
         return;
       }
@@ -216,27 +260,212 @@ export default function CreateBillScreen() {
     try {
       setSaving(true);
       const newInvoiceNo = await addBill(finalBill);
-      Alert.alert('Success', `Invoice ${newInvoiceNo} saved successfully!`, [
-        {
-          text: 'OK',
-          onPress: () => {
-            // Reset Create Bill Screen
-            setCustomerName('');
-            setCustomerAddress('');
-            setCustomerGstin('');
-            setCustomerState('Tamil Nadu');
-            setItems([]);
-            setPaymentStatus('Pending');
-            setPaymentMode('Cash');
-            setInvoiceNo(generateNextInvoiceNumber());
-          },
-        },
-      ]);
+      
+      // Set saved bill data for modal print/pdf actions
+      setSavedBillForActions({
+        ...finalBill,
+        id: newInvoiceNo,
+        invoiceNumber: newInvoiceNo
+      });
+
+      // Show action choices modal
+      setShowPostSaveModal(true);
     } catch (err: any) {
       Alert.alert('Billing Error', err.message || 'Failed to save bill');
     } finally {
       setSaving(false);
     }
+  };
+
+  // Print Saved Bill from Modal
+  const handlePrintSavedBill = async () => {
+    if (!savedBillForActions) return;
+
+    if (printerSettings.paperSize === 'A4') {
+      try {
+        await printA4Invoice(savedBillForActions, companySettings);
+      } catch (error) {
+        Alert.alert('Printing Error', 'Could not open print sheet.');
+      }
+      return;
+    }
+
+    const printerName = printerSettings.connectedPrinter;
+    const printerAddress = printerSettings.connectedPrinterAddress;
+    if (!printerName) {
+      Alert.alert(
+        'Printer Disconnected',
+        'No active printer found. Would you like to connect a thermal printer now?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Connect Printer', onPress: () => setPrinterModalVisible(true) }
+        ]
+      );
+      return;
+    }
+
+    if (!BluetoothEscposPrinter || !printerAddress || printerAddress.startsWith('pr-')) {
+      Alert.alert(
+        'Thermal Printer Active (Simulated)',
+        `Sending invoice ${savedBillForActions.invoiceNumber} to connected thermal printer "${printerName}" (${printerSettings.paperSize} width)...`,
+        [{ text: 'Dismiss' }]
+      );
+      return;
+    }
+
+    try {
+      await BluetoothEscposPrinter.printerInit();
+      await BluetoothEscposPrinter.printerAlign(BluetoothEscposPrinter.ALIGN.CENTER);
+      
+      const is58 = printerSettings.paperSize === '58mm';
+      const colWidths = is58 ? [16, 6, 10] : [24, 8, 16];
+      
+      // Print Header
+      await BluetoothEscposPrinter.setBlob(1);
+      await BluetoothEscposPrinter.printText(`${companySettings.name}\n`, {
+        encoding: 'GBK',
+        codepage: 0,
+        widthtimes: 1,
+        heigthtimes: 1,
+        fonttype: 1
+      });
+      await BluetoothEscposPrinter.setBlob(0);
+      
+      await BluetoothEscposPrinter.printText(`${companySettings.address}\n`, {});
+      await BluetoothEscposPrinter.printText(`Phone: ${companySettings.phone}\n`, {});
+      await BluetoothEscposPrinter.printText(`GSTIN: ${companySettings.gstin}\n`, {});
+      
+      const divider = is58 ? '-'.repeat(32) + '\n' : '-'.repeat(48) + '\n';
+      await BluetoothEscposPrinter.printText(divider, {});
+      
+      await BluetoothEscposPrinter.setBlob(1);
+      await BluetoothEscposPrinter.printText("TAX INVOICE\n", {});
+      await BluetoothEscposPrinter.setBlob(0);
+      
+      await BluetoothEscposPrinter.printText(divider, {});
+      
+      // Print Meta Info
+      await BluetoothEscposPrinter.printerAlign(BluetoothEscposPrinter.ALIGN.LEFT);
+      await BluetoothEscposPrinter.printText(`Invoice No: ${savedBillForActions.invoiceNumber}\n`, {});
+      await BluetoothEscposPrinter.printText(`Date: ${savedBillForActions.date}\n`, {});
+      await BluetoothEscposPrinter.printText(`Billed To: ${customerName}\n`, {});
+      
+      await BluetoothEscposPrinter.printText(divider, {});
+      
+      // Print Table Headers
+      await BluetoothEscposPrinter.printColumn(
+        colWidths,
+        [BluetoothEscposPrinter.ALIGN.LEFT, BluetoothEscposPrinter.ALIGN.CENTER, BluetoothEscposPrinter.ALIGN.RIGHT],
+        ['Item / Qty', 'Price', 'Amount'],
+        {}
+      );
+      await BluetoothEscposPrinter.printText(divider, {});
+      
+      // Print Items
+      for (const item of savedBillForActions.items) {
+        await BluetoothEscposPrinter.setBlob(1);
+        await BluetoothEscposPrinter.printText(`${item.name}\n`, {});
+        await BluetoothEscposPrinter.setBlob(0);
+        await BluetoothEscposPrinter.printColumn(
+          colWidths,
+          [BluetoothEscposPrinter.ALIGN.LEFT, BluetoothEscposPrinter.ALIGN.CENTER, BluetoothEscposPrinter.ALIGN.RIGHT],
+          [`Qty: ${item.qty}`, item.price.toFixed(2), item.amount.toFixed(2)],
+          {}
+        );
+      }
+      
+      await BluetoothEscposPrinter.printText(divider, {});
+      
+      // Calculations
+      await BluetoothEscposPrinter.printColumn(
+        is58 ? [16, 16] : [24, 24],
+        [BluetoothEscposPrinter.ALIGN.LEFT, BluetoothEscposPrinter.ALIGN.RIGHT],
+        ['Subtotal:', savedBillForActions.subtotal.toFixed(2)],
+        {}
+      );
+      
+      if (gstEnabled) {
+        for (const [rateStr, amt] of Object.entries(groupedGst)) {
+          const rate = parseFloat(rateStr);
+          const splitRate = rate / 2;
+          const splitAmt = amt / 2;
+          await BluetoothEscposPrinter.printColumn(
+            is58 ? [16, 16] : [24, 24],
+            [BluetoothEscposPrinter.ALIGN.LEFT, BluetoothEscposPrinter.ALIGN.RIGHT],
+            [`CGST (${splitRate}%):`, splitAmt.toFixed(2)],
+            {}
+          );
+          await BluetoothEscposPrinter.printColumn(
+            is58 ? [16, 16] : [24, 24],
+            [BluetoothEscposPrinter.ALIGN.LEFT, BluetoothEscposPrinter.ALIGN.RIGHT],
+            [`SGST (${splitRate}%):`, splitAmt.toFixed(2)],
+            {}
+          );
+        }
+      }
+      
+      await BluetoothEscposPrinter.printText(divider, {});
+      
+      await BluetoothEscposPrinter.setBlob(1);
+      await BluetoothEscposPrinter.printColumn(
+        is58 ? [16, 16] : [24, 24],
+        [BluetoothEscposPrinter.ALIGN.LEFT, BluetoothEscposPrinter.ALIGN.RIGHT],
+        ['GRAND TOTAL:', formatCurrency(savedBillForActions.total)],
+        {}
+      );
+      await BluetoothEscposPrinter.setBlob(0);
+      
+      await BluetoothEscposPrinter.printText(divider, {});
+      
+      // Bank details
+      await BluetoothEscposPrinter.printText("BANK PAYMENT DETAILS\n", {});
+      await BluetoothEscposPrinter.printText(`Bank: ${companySettings.bankName}\n`, {});
+      await BluetoothEscposPrinter.printText(`Name: ${companySettings.accountName}\n`, {});
+      await BluetoothEscposPrinter.printText(`A/C: ${companySettings.accountNo}\n`, {});
+      await BluetoothEscposPrinter.printText(`IFSC: ${companySettings.ifsc}\n`, {});
+      
+      await BluetoothEscposPrinter.printText(divider, {});
+      
+      // Footer signatures
+      await BluetoothEscposPrinter.printerAlign(BluetoothEscposPrinter.ALIGN.RIGHT);
+      await BluetoothEscposPrinter.printText(`For ${companySettings.name}\n\n\n`, {});
+      await BluetoothEscposPrinter.printText("Authorized Signatory\n", {});
+      
+      await BluetoothEscposPrinter.printerAlign(BluetoothEscposPrinter.ALIGN.CENTER);
+      await BluetoothEscposPrinter.printText("* Thanks for doing business! *\n", {});
+      await BluetoothEscposPrinter.printText("Goods once sold will not be returned.\n\n\n\n", {});
+      
+      Alert.alert('Print Success', 'Invoice printed successfully!');
+    } catch (error) {
+      console.warn('Real print failed:', error);
+      Alert.alert('Printing Error', 'Could not print to device. Please ensure it is powered on and connected.');
+    }
+  };
+
+  // Download PDF from Modal
+  const handleDownloadSavedBillPdf = async () => {
+    if (!savedBillForActions) return;
+    try {
+      await downloadA4InvoicePdf(savedBillForActions, companySettings);
+    } catch (error) {
+      console.error('Failed to download PDF:', error);
+    }
+  };
+
+  // Close Action Modal and Reset Form
+  const handleClosePostSaveModal = () => {
+    setShowPostSaveModal(false);
+    setSavedBillForActions(null);
+    
+    // Reset Form
+    setCustomerName('');
+    setCustomerAddress('');
+    setCustomerGstin('');
+    setCustomerState('Tamil Nadu');
+    setItems([]);
+    setPaymentStatus('Pending');
+    setPaymentMode('Cash');
+    setInvoiceNo(generateNextInvoiceNumber());
   };
 
   // Preview Bill
@@ -463,6 +692,14 @@ export default function CreateBillScreen() {
           contentContainerStyle={styles.scrollContent} 
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              tintColor="#D4AF37"
+              colors={['#D4AF37']}
+            />
+          }
         >
           {/* Header Metadata */}
           <View style={styles.header}>
@@ -540,6 +777,14 @@ export default function CreateBillScreen() {
                 iconName="search-outline"
                 containerStyle={{ marginVertical: 0 }}
               />
+              {selectedProduct && (
+                <View style={styles.selectedProductStockBadge}>
+                  <Ionicons name="cube-outline" size={12} color="#D4AF37" />
+                  <Text style={styles.selectedProductStockText}>
+                    Available Stock: <Text style={styles.goldTextBold}>{selectedProduct.stockQty} kg</Text>
+                  </Text>
+                </View>
+              )}
               {/* Product Autocomplete Dropdown */}
               {showProductDropdown && searchQuery.trim().length > 0 && (
                 <View style={styles.dropdownList}>
@@ -554,6 +799,7 @@ export default function CreateBillScreen() {
                     filteredProducts.map((p) => {
                       const isLowStock = p.stockQty > 0 && p.stockQty < 10;
                       const isOutOfStock = p.stockQty <= 0;
+                      const parsed = parseItemNameAndHsn(p.name);
 
                       return (
                         <TouchableOpacity
@@ -564,14 +810,14 @@ export default function CreateBillScreen() {
                         >
                           <View style={{ flex: 1 }}>
                             <Text style={[styles.dropdownItemText, isOutOfStock && { opacity: 0.5 }]}>
-                              {p.name}
+                              {parsed.name} {parsed.hsn && `(HSN: ${parsed.hsn})`}
                             </Text>
                             {isOutOfStock ? (
                               <Text style={styles.dropdownItemOutOfStock}>Out of Stock</Text>
                             ) : isLowStock ? (
-                              <Text style={styles.dropdownItemLowStock}>Only {p.stockQty} left</Text>
+                              <Text style={styles.dropdownItemLowStock}>Only {p.stockQty} kg left</Text>
                             ) : (
-                              <Text style={styles.dropdownItemStock}>Stock: {p.stockQty}</Text>
+                              <Text style={styles.dropdownItemStock}>Stock: {p.stockQty} kg</Text>
                             )}
                           </View>
                           <Text style={[styles.dropdownItemPrice, isOutOfStock && { opacity: 0.5 }]}>
@@ -589,8 +835,8 @@ export default function CreateBillScreen() {
             <View style={styles.inputRow}>
               <View style={{ flex: 1, marginRight: 12 }}>
                 <InputField
-                  label="Quantity"
-                  placeholder="1"
+                  label="Quantity (kg)"
+                  placeholder="1.0"
                   value={qty}
                   onChangeText={setQty}
                   keyboardType="numeric"
@@ -626,7 +872,7 @@ export default function CreateBillScreen() {
               {/* Table Headers */}
               <View style={styles.tableHeaderRow}>
                 <Text style={[styles.th, styles.colItem]}>Item Name</Text>
-                <Text style={[styles.th, styles.colQty]}>Qty</Text>
+                <Text style={[styles.th, styles.colQty]}>Qty (kg)</Text>
                 <Text style={[styles.th, styles.colPrice]}>Price</Text>
                 <Text style={[styles.th, styles.colAmt]}>Total</Text>
                 <Text style={[styles.th, styles.colAction]}></Text>
@@ -638,7 +884,7 @@ export default function CreateBillScreen() {
                   <Text style={[styles.td, styles.colItem]} numberOfLines={2}>
                     {item.name}
                   </Text>
-                  <Text style={[styles.td, styles.colQty]}>{item.qty}</Text>
+                  <Text style={[styles.td, styles.colQty]}>{item.qty} kg</Text>
                   <Text style={[styles.td, styles.colPrice]}>{item.price}</Text>
                   <Text style={[styles.td, styles.colAmt]}>{formatCurrency(item.amount)}</Text>
                   <TouchableOpacity
@@ -715,12 +961,23 @@ export default function CreateBillScreen() {
               </View>
             )}
 
-            {gstEnabled && Object.entries(groupedGst).map(([rate, amt]) => (
-              <View key={rate} style={styles.summaryRow}>
-                <Text style={styles.taxLabel}>GST ({rate}%)</Text>
-                <Text style={styles.taxValue}>{formatCurrency(amt)}</Text>
-              </View>
-            ))}
+            {gstEnabled && Object.entries(groupedGst).map(([rateStr, amt]) => {
+              const rate = parseFloat(rateStr);
+              const splitRate = rate / 2;
+              const splitAmt = amt / 2;
+              return (
+                <React.Fragment key={rateStr}>
+                  <View style={styles.summaryRow}>
+                    <Text style={styles.taxLabel}>CGST ({splitRate}%)</Text>
+                    <Text style={styles.taxValue}>{formatCurrency(splitAmt)}</Text>
+                  </View>
+                  <View style={styles.summaryRow}>
+                    <Text style={styles.taxLabel}>SGST ({splitRate}%)</Text>
+                    <Text style={styles.taxValue}>{formatCurrency(splitAmt)}</Text>
+                  </View>
+                </React.Fragment>
+              );
+            })}
 
             <View style={styles.totalDivider} />
             <View style={styles.summaryRow}>
@@ -762,6 +1019,52 @@ export default function CreateBillScreen() {
         visible={printerModalVisible}
         onClose={() => setPrinterModalVisible(false)}
       />
+      {/* Post Save Actions Modal */}
+      <Modal
+        visible={showPostSaveModal}
+        transparent={true}
+        animationType="slide"
+        statusBarTranslucent={true}
+        onRequestClose={handleClosePostSaveModal}
+      >
+        <View style={styles.modalOverlay}>
+          <GlassCard style={styles.postSaveCard} goldBorder={true}>
+            <View style={styles.successIconBadge}>
+              <Ionicons name="checkmark-circle" size={48} color="#34C759" />
+            </View>
+            <Text style={styles.postSaveTitle}>Invoice Saved Successfully!</Text>
+            <Text style={styles.postSaveSubtitle}>
+              Bill Number: <Text style={styles.goldText}>{savedBillForActions?.invoiceNumber}</Text>
+            </Text>
+
+            <View style={styles.modalButtonsContainer}>
+              <TouchableOpacity
+                style={[styles.modalBtn, styles.modalBtnPrimary]}
+                onPress={handlePrintSavedBill}
+              >
+                <Ionicons name="print-outline" size={20} color="#191820" />
+                <Text style={styles.modalBtnPrimaryText}>Print Invoice</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.modalBtn, styles.modalBtnSecondary]}
+                onPress={handleDownloadSavedBillPdf}
+              >
+                <Ionicons name="download-outline" size={20} color="#D4AF37" />
+                <Text style={styles.modalBtnSecondaryText}>Download PDF</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.modalBtn, styles.modalBtnOutline]}
+                onPress={handleClosePostSaveModal}
+              >
+                <Ionicons name="arrow-forward-outline" size={20} color="#A0A0B0" />
+                <Text style={styles.modalBtnOutlineText}>Done / New Bill</Text>
+              </TouchableOpacity>
+            </View>
+          </GlassCard>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -1100,5 +1403,107 @@ const styles = StyleSheet.create({
   },
   paymentModeBtnTextActive: {
     color: '#191820',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(25, 24, 32, 0.85)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  postSaveCard: {
+    width: '100%',
+    padding: 24,
+    alignItems: 'center',
+  },
+  successIconBadge: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(52, 199, 89, 0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  postSaveTitle: {
+    color: '#FFFFFF',
+    fontSize: 20,
+    fontWeight: '800',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  postSaveSubtitle: {
+    color: '#A0A0B0',
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  goldText: {
+    color: '#D4AF37',
+    fontWeight: '800',
+  },
+  modalButtonsContainer: {
+    width: '100%',
+    gap: 12,
+  },
+  modalBtn: {
+    width: '100%',
+    height: 50,
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  modalBtnPrimary: {
+    backgroundColor: '#D4AF37',
+  },
+  modalBtnPrimaryText: {
+    color: '#191820',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  modalBtnSecondary: {
+    backgroundColor: 'transparent',
+    borderWidth: 1.5,
+    borderColor: '#D4AF37',
+  },
+  modalBtnSecondaryText: {
+    color: '#D4AF37',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  modalBtnOutline: {
+    backgroundColor: '#24242a',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  modalBtnOutlineText: {
+    color: '#A0A0B0',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  selectedProductStockBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(212, 175, 55, 0.08)',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    marginTop: 6,
+    gap: 4,
+    alignSelf: 'flex-start',
+    borderWidth: 0.5,
+    borderColor: 'rgba(212, 175, 55, 0.15)',
+  },
+  selectedProductStockText: {
+    color: '#A0A0B0',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  goldTextBold: {
+    color: '#D4AF37',
+    fontWeight: '700',
   },
 });

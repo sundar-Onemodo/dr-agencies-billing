@@ -5,7 +5,8 @@ import {
   fetchProducts, 
   addProduct as addProductThunk, 
   deleteProduct as deleteProductThunk,
-  updateProduct as updateProductThunk
+  updateProduct as updateProductThunk,
+  fetchStockLedger
 } from '../store/slices/productSlice';
 import { 
   fetchRecentBills, 
@@ -91,7 +92,7 @@ interface BillingContextType {
   addBill: (bill: Omit<Bill, 'id'>) => Promise<string>; // returns generated invoice ID
   deleteBill: (id: string) => Promise<void>;
   companySettings: CompanySettings;
-  updateCompanySettings: (settings: CompanySettings) => void;
+  updateCompanySettings: (settings: CompanySettings) => Promise<void>;
   printerSettings: PrinterSettings;
   updatePrinterSettings: (settings: Partial<PrinterSettings>) => void;
   generateNextInvoiceNumber: () => string;
@@ -101,6 +102,8 @@ interface BillingContextType {
   fetchCustomerPaymentsList: (customerId: string) => Promise<CustomerPayment[]>;
   customerPayments: Record<string, CustomerPayment[]>;
   fetchBillsRange: (from: string, to: string) => Promise<void>;
+  refreshData: () => Promise<void>;
+  fetchStockLedgerList: (from?: string, to?: string) => Promise<any[]>;
 }
 
 const BillingContext = createContext<BillingContextType | undefined>(undefined);
@@ -161,18 +164,31 @@ export const BillingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const generateNextInvoiceNumber = (): string => {
-    const today = new Date();
-    const yyyy = today.getFullYear();
-    const mm = String(today.getMonth() + 1).padStart(2, '0');
-    const dd = String(today.getDate()).padStart(2, '0');
-    const todayStr = `${yyyy}${mm}${dd}`; // e.g. "20260610"
-
     let maxSerial = 0;
+    
+    // Find the maximum serial number among all existing bills
     bills.forEach((bill) => {
       const invNum = bill.invoiceNumber;
-      if (invNum && invNum.endsWith(todayStr)) {
-        const serialStr = invNum.substring(0, invNum.length - todayStr.length);
-        const serial = parseInt(serialStr, 10);
+      if (invNum) {
+        let serial = 0;
+        // Check if new format: starts with digits followed by letters (e.g. 01DRA2026)
+        const newFormatMatch = invNum.match(/^(\d+)[a-zA-Z]/);
+        if (newFormatMatch) {
+          serial = parseInt(newFormatMatch[1], 10);
+        } else if (/^\d+$/.test(invNum)) {
+          // Old format: entirely digits (e.g. 0120260822)
+          if (invNum.length > 8) {
+            serial = parseInt(invNum.substring(0, invNum.length - 8), 10);
+          } else {
+            serial = parseInt(invNum, 10);
+          }
+        } else {
+          // Fallback regex match for leading digits
+          const match = invNum.match(/^(\d+)/);
+          if (match) {
+            serial = parseInt(match[1], 10);
+          }
+        }
         if (!isNaN(serial) && serial > maxSerial) {
           maxSerial = serial;
         }
@@ -180,8 +196,24 @@ export const BillingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     });
 
     const nextSerial = maxSerial + 1;
-    const serialPrefix = String(nextSerial).padStart(2, '0');
-    return `${serialPrefix}${todayStr}`;
+    // Format serial number as at least 2 digits (e.g., 01, 02, etc.)
+    const serialStr = String(nextSerial).padStart(2, '0');
+    
+    // Get store initials
+    const getCompanyInitials = (name: string): string => {
+      if (!name) return 'DR';
+      return name
+        .split(' ')
+        .map((word) => word[0])
+        .join('')
+        .substring(0, 3)
+        .toUpperCase();
+    };
+    
+    const initials = getCompanyInitials(companySettings.name || 'DRA');
+    const currentYear = new Date().getFullYear();
+    
+    return `${serialStr}${initials}${currentYear}`;
   };
 
   const addBill = async (newBill: Omit<Bill, 'id'>): Promise<string> => {
@@ -238,8 +270,28 @@ export const BillingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     await dispatch(fetchRecentBills({ from, to }));
   };
 
-  const updateCompanySettings = (settings: CompanySettings) => {
-    dispatch(saveStoreProfileThunk(settings));
+  const refreshData = async (): Promise<void> => {
+    await Promise.all([
+      dispatch(fetchProducts()),
+      dispatch(fetchStoreProfile()),
+      dispatch(fetchRecentBills()),
+      dispatch(fetchCustomers()),
+    ]);
+  };
+
+  const updateCompanySettings = async (settings: CompanySettings): Promise<void> => {
+    const resultAction = await dispatch(saveStoreProfileThunk(settings));
+    if (saveStoreProfileThunk.rejected.match(resultAction)) {
+      throw new Error(resultAction.payload as string || 'Failed to save store settings');
+    }
+  };
+
+  const fetchStockLedgerList = async (from?: string, to?: string): Promise<any[]> => {
+    const resultAction = await dispatch(fetchStockLedger({ from, to }));
+    if (fetchStockLedger.rejected.match(resultAction)) {
+      throw new Error(resultAction.payload as string || 'Failed to fetch stock ledger');
+    }
+    return resultAction.payload as any[];
   };
 
   const updatePrinterSettings = (settings: Partial<PrinterSettings>) => {
@@ -269,8 +321,9 @@ export const BillingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         fetchCustomersList,
         recordCustomerPayment,
         fetchCustomerPaymentsList,
-        customerPayments,
         fetchBillsRange,
+        refreshData,
+        fetchStockLedgerList,
       }}
     >
       {children}

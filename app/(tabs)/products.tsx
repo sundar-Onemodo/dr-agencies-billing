@@ -9,15 +9,42 @@ import {
   Modal,
   SafeAreaView,
   Platform,
+  RefreshControl,
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { useRouter } from 'expo-router';
 import { useBilling, Product } from '@/context/BillingContext';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { GoldButton } from '@/components/ui/GoldButton';
 import { InputField } from '@/components/ui/InputField';
 
+const parseItemNameAndHsn = (name: string) => {
+  const hsnMatch = name.match(/(?:HSN\/SAC\s*:\s*|HSN\s*:\s*)(\d+)/i);
+  const gstMatch = name.match(/(?:GST\s*:\s*)(\d+)%/i);
+  let hsn = '';
+  let gstRate = 18;
+  let cleanName = name;
+
+  if (hsnMatch) {
+    hsn = hsnMatch[1] || hsnMatch[0];
+    cleanName = cleanName.replace(hsnMatch[0], '');
+  }
+  if (gstMatch) {
+    gstRate = parseInt(gstMatch[1], 10);
+    cleanName = cleanName.replace(gstMatch[0], '');
+  }
+
+  cleanName = cleanName
+    .replace(/\(\s*\)/g, '')
+    .replace(/,\s*,/g, ',')
+    .trim();
+
+  return { name: cleanName, hsn, gstRate };
+};
+
 export default function ProductsScreen() {
-  const { products, addProduct, updateProduct, deleteProduct } = useBilling();
+  const router = useRouter();
+  const { products, addProduct, updateProduct, deleteProduct, refreshData } = useBilling();
 
   // Search filter State
   const [searchQuery, setSearchQuery] = useState('');
@@ -28,14 +55,28 @@ export default function ProductsScreen() {
 
   // Form States
   const [name, setName] = useState('');
+  const [hsn, setHsn] = useState('');
   const [price, setPrice] = useState('');
   const [gstRate, setGstRate] = useState('18'); // Default 18% GST
   const [stockQty, setStockQty] = useState('0');
+  const [refreshing, setRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await refreshData();
+    } catch (e) {
+      console.warn('Inventory refresh failed:', e);
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   // Open modal for adding
   const handleOpenAdd = () => {
     setEditingProduct(null);
     setName('');
+    setHsn('');
     setPrice('');
     setGstRate('18');
     setStockQty('0');
@@ -45,7 +86,9 @@ export default function ProductsScreen() {
   // Open modal for editing
   const handleOpenEdit = (product: Product) => {
     setEditingProduct(product);
-    setName(product.name);
+    const parsed = parseItemNameAndHsn(product.name);
+    setName(parsed.name);
+    setHsn(parsed.hsn);
     setPrice(product.price.toString());
     setGstRate(product.gstRate.toString());
     setStockQty(product.stockQty?.toString() || '0');
@@ -75,12 +118,14 @@ export default function ProductsScreen() {
       return;
     }
 
+    const finalName = hsn.trim() ? `${name.trim()} HSN: ${hsn.trim()}` : name.trim();
+
     try {
       if (editingProduct) {
         // Update
         await updateProduct({
           id: editingProduct.id,
-          name,
+          name: finalName,
           price: p,
           gstRate: g,
           stockQty: s,
@@ -88,7 +133,7 @@ export default function ProductsScreen() {
       } else {
         // Create
         await addProduct({
-          name,
+          name: finalName,
           price: p,
           gstRate: g,
           stockQty: s,
@@ -133,14 +178,20 @@ export default function ProductsScreen() {
     <SafeAreaView style={styles.container}>
       {/* Fixed Search and Header Section */}
       <View style={styles.header}>
-        <View>
+        <View style={{ flex: 1 }}>
           <Text style={styles.title}>Inventory</Text>
           <Text style={styles.subtitle}>{products.length} Products listed</Text>
         </View>
-        <TouchableOpacity style={styles.addBtn} onPress={handleOpenAdd}>
-          <Ionicons name="add" size={24} color="#191820" />
-          <Text style={styles.addBtnText}>Add Item</Text>
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          <TouchableOpacity style={styles.stockLogsBtn} onPress={() => router.push('/product-ledger')}>
+            <Ionicons name="calendar-outline" size={16} color="#D4AF37" />
+            <Text style={styles.stockLogsBtnText}>Logs</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.addBtn} onPress={handleOpenAdd}>
+            <Ionicons name="add" size={18} color="#191820" />
+            <Text style={styles.addBtnText}>Add</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <View style={styles.searchContainer}>
@@ -155,7 +206,18 @@ export default function ProductsScreen() {
       </View>
 
       {/* Scrollable list */}
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        contentContainerStyle={styles.scrollContent} 
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor="#D4AF37"
+            colors={['#D4AF37']}
+          />
+        }
+      >
         {filteredProducts.length === 0 ? (
           <GlassCard style={styles.emptyCard}>
             <Ionicons name="cube-outline" size={40} color="#A0A0B0" style={{ marginBottom: 12, opacity: 0.7 }} />
@@ -168,13 +230,19 @@ export default function ProductsScreen() {
           filteredProducts.map((item) => {
             const isLowStock = item.stockQty > 0 && item.stockQty < 10;
             const isOutOfStock = item.stockQty <= 0;
+            const parsed = parseItemNameAndHsn(item.name);
 
             return (
               <GlassCard key={item.id} style={styles.productCard}>
                 <View style={styles.cardInfo}>
-                  <Text style={styles.productName}>{item.name}</Text>
+                  <Text style={styles.productName}>{parsed.name}</Text>
                   <View style={styles.metaRow}>
                     <Text style={styles.productPrice}>{formatCurrency(item.price)}</Text>
+                    {parsed.hsn ? (
+                      <View style={styles.hsnBadge}>
+                        <Text style={styles.hsnBadgeText}>HSN {parsed.hsn}</Text>
+                      </View>
+                    ) : null}
                     <View style={styles.gstBadge}>
                       <Text style={styles.gstText}>GST {item.gstRate}%</Text>
                     </View>
@@ -195,7 +263,7 @@ export default function ProductsScreen() {
                             isLowStock ? styles.lowStockText : styles.inStockText,
                           ]}
                         >
-                          Stock: {item.stockQty}
+                          Stock: {item.stockQty} kg
                         </Text>
                       </View>
                     )}
@@ -238,6 +306,15 @@ export default function ProductsScreen() {
               />
 
               <InputField
+                label="HSN / SAC Code"
+                placeholder="e.g. 15131900 (optional)"
+                value={hsn}
+                onChangeText={setHsn}
+                keyboardType="numeric"
+                iconName="barcode-outline"
+              />
+
+              <InputField
                 label="Base Price (₹)"
                 placeholder="e.g. 450"
                 value={price}
@@ -256,8 +333,8 @@ export default function ProductsScreen() {
               />
 
               <InputField
-                label="Stock Quantity"
-                placeholder="e.g. 100"
+                label="Stock Quantity (kg)"
+                placeholder="e.g. 100.5"
                 value={stockQty}
                 onChangeText={setStockQty}
                 keyboardType="numeric"
@@ -522,5 +599,34 @@ const styles = StyleSheet.create({
   },
   outOfStockText: {
     color: '#FF4B4B',
+  },
+  hsnBadge: {
+    backgroundColor: 'rgba(212, 175, 55, 0.08)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 0.5,
+    borderColor: 'rgba(212, 175, 55, 0.15)',
+  },
+  hsnBadgeText: {
+    color: '#D4AF37',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  stockLogsBtn: {
+    backgroundColor: 'transparent',
+    borderWidth: 1.2,
+    borderColor: '#D4AF37',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    gap: 4,
+  },
+  stockLogsBtnText: {
+    color: '#D4AF37',
+    fontSize: 13,
+    fontWeight: '700',
   },
 });

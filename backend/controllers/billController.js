@@ -251,6 +251,30 @@ exports.createBill = async (req, res) => {
       });
     }
 
+    // 5.2 Log stock movements ('OUT') for each inventory item sold
+    try {
+      const logs = items.map(item => {
+        const quantity = parseFloat(item.qty || item.quantity || 1);
+        const rawProductId = item.productId || item.product_id;
+        if (rawProductId && rawProductId !== 'null' && rawProductId !== '') {
+          return {
+            user_id: req.user.id,
+            product_id: parseInt(rawProductId, 10),
+            type: 'OUT',
+            quantity,
+            reference_id: `BILL-${finalInvoiceNumber}`
+          };
+        }
+        return null;
+      }).filter(log => log !== null);
+
+      if (logs.length > 0) {
+        await supabase.from('product_stock_logs').insert(logs);
+      }
+    } catch (logErr) {
+      console.error('Error logging stock out movements:', logErr);
+    }
+
     // 5.5 If payment status is Paid, record the payment log and update customer balance
     if (bill.customer_id && finalPaymentStatus === 'Paid') {
       try {
@@ -503,6 +527,28 @@ exports.deleteBill = async (req, res) => {
           p_user_id: req.user.id
         });
       }
+    }
+
+    // 2.2 Log stock restore ('IN') for each item returned
+    try {
+      const logs = items.map(item => {
+        if (item.product_id) {
+          return {
+            user_id: req.user.id,
+            product_id: parseInt(item.product_id, 10),
+            type: 'IN',
+            quantity: parseFloat(item.quantity),
+            reference_id: `DELETE-BILL-${bill.invoice_number}`
+          };
+        }
+        return null;
+      }).filter(log => log !== null);
+
+      if (logs.length > 0) {
+        await supabase.from('product_stock_logs').insert(logs);
+      }
+    } catch (logErr) {
+      console.error('Error logging stock restore on delete:', logErr);
     }
 
     // 3. Delete the bill from database (ON DELETE CASCADE deletes bill_items)

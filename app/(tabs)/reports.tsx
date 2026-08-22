@@ -9,6 +9,7 @@ import {
   Platform,
   Alert,
   ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { DateRangePickerModal } from '@/components/ui/DateRangePickerModal';
 import { useRouter } from 'expo-router';
@@ -26,6 +27,48 @@ export default function ReportsScreen() {
   const [showCalendar, setShowCalendar] = useState(false);
   const [customRange, setCustomRange] = useState<{ start: Date; end: Date } | null>(null);
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      const today = new Date();
+      let fromStr = '';
+      let toStr = '';
+
+      const formatDateForApi = (date: Date) => {
+        const yyyy = date.getFullYear();
+        const mm = String(date.getMonth() + 1).padStart(2, '0');
+        const dd = String(date.getDate()).padStart(2, '0');
+        return `${yyyy}-${mm}-${dd}`;
+      };
+
+      if (activeFilter === 'today') {
+        fromStr = formatDateForApi(today);
+        toStr = fromStr;
+      } else if (activeFilter === 'weekly') {
+        const sevenDaysAgo = new Date(today);
+        sevenDaysAgo.setDate(today.getDate() - 7);
+        fromStr = formatDateForApi(sevenDaysAgo);
+        toStr = formatDateForApi(today);
+      } else if (activeFilter === 'monthly') {
+        const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+        fromStr = formatDateForApi(firstDayOfMonth);
+        toStr = formatDateForApi(today);
+      } else if (activeFilter === 'custom' && customRange) {
+        fromStr = formatDateForApi(customRange.start);
+        toStr = formatDateForApi(customRange.end);
+      } else {
+        return;
+      }
+
+      await fetchBillsRange(fromStr, toStr);
+    } catch (e) {
+      console.warn('Reports refresh failed:', e);
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   // Fetch bills from server when filter changes
   React.useEffect(() => {
@@ -197,7 +240,18 @@ export default function ReportsScreen() {
         </View>
       )}
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        contentContainerStyle={styles.scrollContent} 
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor="#D4AF37"
+            colors={['#D4AF37']}
+          />
+        }
+      >
         {/* Dynamic Summary Cards */}
         <View style={styles.summaryContainer}>
           <GlassCard style={styles.summaryCard} goldBorder={true}>

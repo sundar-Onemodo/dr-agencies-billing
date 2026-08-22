@@ -1,5 +1,5 @@
-import React from 'react';
-import { StyleSheet, Text, View, ScrollView, FlatList, TouchableOpacity, SafeAreaView, Dimensions, Platform, Alert } from 'react-native';
+import React, { useState } from 'react';
+import { StyleSheet, Text, View, ScrollView, FlatList, TouchableOpacity, SafeAreaView, Dimensions, Platform, Alert, RefreshControl } from 'react-native';
 import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { parseCustomerInfo } from '@/utils/customer';
@@ -8,7 +8,19 @@ import { GlassCard } from '@/components/ui/GlassCard';
 
 export default function DashboardScreen() {
   const router = useRouter();
-  const { bills, companySettings, deleteBill } = useBilling();
+  const { bills, companySettings, deleteBill, refreshData } = useBilling();
+  const [refreshing, setRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await refreshData();
+    } catch (e) {
+      console.warn('Dashboard refresh failed:', e);
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const handleDeleteBill = (id: string, invoiceNo: string) => {
     Alert.alert(
@@ -97,7 +109,18 @@ export default function DashboardScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        contentContainerStyle={styles.scrollContent} 
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor="#D4AF37"
+            colors={['#D4AF37']}
+          />
+        }
+      >
         {/* Header Section */}
         <View style={styles.header}>
           <View>

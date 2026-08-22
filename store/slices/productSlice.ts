@@ -120,6 +120,38 @@ export const updateProduct = createAsyncThunk(
   }
 );
 
+export interface StockLog {
+  id: string;
+  productId: string;
+  productName: string;
+  type: 'IN' | 'OUT';
+  quantity: number;
+  referenceId: string;
+  createdAt: string;
+}
+
+export const fetchStockLedger = createAsyncThunk(
+  'products/fetchStockLedger',
+  async (range: { from?: string; to?: string } | undefined, { getState, rejectWithValue }) => {
+    try {
+      const headers = getAuthHeaders(getState() as RootState);
+      let queryStr = '';
+      if (range?.from && range?.to) {
+        queryStr = `?from=${range.from}&to=${range.to}`;
+      }
+      const response = await fetch(`${API_URL}/products/stock-ledger${queryStr}`, { headers });
+      const data = await response.json();
+
+      if (!response.ok) {
+        return rejectWithValue(data.error || 'Failed to fetch stock logs');
+      }
+      return data.logs as StockLog[];
+    } catch (err: any) {
+      return rejectWithValue(err.message || 'Server connection failed');
+    }
+  }
+);
+
 const productSlice = createSlice({
   name: 'products',
   initialState,

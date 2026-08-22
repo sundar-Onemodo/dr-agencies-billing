@@ -1,5 +1,8 @@
 import { Bill, CompanySettings } from '@/context/BillingContext';
 import * as Print from 'expo-print';
+import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
+import { Alert } from 'react-native';
 import { parseCustomerInfo } from './customer';
 
 /**
@@ -107,9 +110,9 @@ const numberToWords = (num: number): string => {
 };
 
 /**
- * Generates and prints an A4 Invoice using expo-print
+ * Generates the HTML content for an A4 Tax Invoice
  */
-export const printA4Invoice = async (bill: Bill, companySettings: CompanySettings) => {
+export const generateA4Html = (bill: Bill, companySettings: CompanySettings): string => {
   const customer = parseCustomerInfo(bill.customerName);
   const initials = getCompanyInitials(companySettings.name || 'KM');
 
@@ -167,7 +170,7 @@ export const printA4Invoice = async (bill: Bill, companySettings: CompanySetting
     }
 
     const gstDisplay = bill.gstEnabled
-      ? `₹${itemGstVal.toFixed(2)} (${gstRate}%)`
+      ? `₹${itemGstVal.toFixed(2)}<br/><span style="font-size: 8px; color: #555;">CGST ${gstRate / 2}%, SGST ${gstRate / 2}%</span>`
       : '₹0.00 (0%)';
 
     return `
@@ -177,7 +180,7 @@ export const printA4Invoice = async (bill: Bill, companySettings: CompanySetting
           <div class="item-name">${name}</div>
         </td>
         <td style="text-align: center;">${hsn || '21039040'}</td>
-        <td style="text-align: center;">${item.qty}</td>
+        <td style="text-align: center;">${item.qty} kg</td>
         <td style="text-align: right;">₹${item.price.toFixed(2)}</td>
         <td style="text-align: right;">${gstDisplay}</td>
         <td style="text-align: right;">₹${itemSubtotal.toFixed(2)}</td>
@@ -194,14 +197,24 @@ export const printA4Invoice = async (bill: Bill, companySettings: CompanySetting
 
   const amountInWords = numberToWords(bill.total);
 
-  const gstRowsHtml = bill.gstEnabled ? Object.entries(groupedGst).map(([rate, amt]) => `
-    <div class="amounts-row">
-      <span>GST (${rate}%):</span>
-      <span style="font-weight: bold;">${formatCurrencyVal(amt)}</span>
-    </div>
-  `).join('') : '';
+  // Split total GST into CGST and SGST rows
+  const gstRowsHtml = bill.gstEnabled ? Object.entries(groupedGst).map(([rateStr, amt]) => {
+    const rate = parseFloat(rateStr);
+    const splitRate = rate / 2;
+    const splitAmt = amt / 2;
+    return `
+      <div class="amounts-row">
+        <span>CGST (${splitRate}%):</span>
+        <span style="font-weight: bold;">${formatCurrencyVal(splitAmt)}</span>
+      </div>
+      <div class="amounts-row">
+        <span>SGST (${splitRate}%):</span>
+        <span style="font-weight: bold;">${formatCurrencyVal(splitAmt)}</span>
+      </div>
+    `;
+  }).join('') : '';
 
-  const htmlContent = `
+  return `
     <!DOCTYPE html>
     <html lang="en">
     <head>
@@ -213,7 +226,7 @@ export const printA4Invoice = async (bill: Bill, companySettings: CompanySetting
         body {
           font-family: 'Outfit', sans-serif;
           margin: 0;
-          padding: 20px 30px; /* Healthy print margins to prevent page edge cutoff */
+          padding: 20px 30px;
           color: #000000;
           background-color: #ffffff;
           box-sizing: border-box;
@@ -344,7 +357,7 @@ export const printA4Invoice = async (bill: Bill, companySettings: CompanySetting
         .items-table {
           width: 100%;
           border-collapse: collapse;
-          table-layout: fixed; /* Enforces strict column widths and prevents table overflow */
+          table-layout: fixed;
         }
 
         .items-table th {
@@ -499,13 +512,10 @@ export const printA4Invoice = async (bill: Bill, companySettings: CompanySetting
       </style>
     </head>
     <body>
-      <!-- Tax Invoice Title Centered -->
       <h2 class="invoice-title">Tax Invoice</h2>
 
       <div class="invoice-box">
-        <!-- Watermark background overlay -->
-        <div class="watermark">DR AGENCIES</div>
-        <!-- Header -->
+        <div class="watermark">${companySettings.name || 'D R AGENCIES'}</div>
         <table class="header-table">
           <tr>
             <td class="company-details-col">
@@ -552,7 +562,6 @@ export const printA4Invoice = async (bill: Bill, companySettings: CompanySetting
           </tr>
         </table>
 
-        <!-- Bill To -->
         <div class="bill-to-section">
           <div class="bill-to-title">Bill To</div>
           <div class="bill-to-name">${customer.name}</div>
@@ -562,14 +571,13 @@ export const printA4Invoice = async (bill: Bill, companySettings: CompanySetting
           <div>State: ${customer.state || '33-Tamil Nadu'}</div>
         </div>
 
-        <!-- Items Table -->
         <table class="items-table">
           <thead>
             <tr>
               <th style="width: 5%;">#</th>
               <th style="width: 35%; text-align: left;">Item name</th>
               <th style="width: 12%;">HSN/ SAC</th>
-              <th style="width: 10%;">Quantity</th>
+              <th style="width: 10%;">Quantity (kg)</th>
               <th style="width: 13%; text-align: right;">Price</th>
               <th style="width: 13%; text-align: right;">GST</th>
               <th style="width: 12%; text-align: right;">Amount</th>
@@ -577,7 +585,6 @@ export const printA4Invoice = async (bill: Bill, companySettings: CompanySetting
           </thead>
           <tbody>
             ${itemsHtml}
-            <!-- Spacer row to stretch the table vertical lines -->
             <tr class="spacer-row">
               <td></td>
               <td></td>
@@ -587,11 +594,10 @@ export const printA4Invoice = async (bill: Bill, companySettings: CompanySetting
               <td></td>
               <td></td>
             </tr>
-            <!-- Total row -->
             <tr class="total-row">
               <td colspan="2" style="text-align: left;">Total</td>
               <td></td>
-              <td style="text-align: center;">${totalQty}</td>
+              <td style="text-align: center;">${totalQty} kg</td>
               <td></td>
               <td style="text-align: right;">₹${totalGst.toFixed(2)}</td>
               <td style="text-align: right;">${formatCurrencyVal(subtotal)}</td>
@@ -599,7 +605,6 @@ export const printA4Invoice = async (bill: Bill, companySettings: CompanySetting
           </tbody>
         </table>
 
-        <!-- Summary & Amounts -->
         <table class="totals-section-table">
           <tr>
             <td class="words-box">
@@ -620,7 +625,6 @@ export const printA4Invoice = async (bill: Bill, companySettings: CompanySetting
           </tr>
         </table>
 
-        <!-- Footer -->
         <table class="footer-section-table">
           <tr>
             <td class="bank-details-box">
@@ -646,13 +650,51 @@ export const printA4Invoice = async (bill: Bill, companySettings: CompanySetting
     </body>
     </html>
   `;
+};
 
+/**
+ * Generates and prints an A4 Invoice using expo-print
+ */
+export const printA4Invoice = async (bill: Bill, companySettings: CompanySettings) => {
+  const htmlContent = generateA4Html(bill, companySettings);
   try {
     await Print.printAsync({
       html: htmlContent,
     });
   } catch (error) {
     console.error('Error printing A4 invoice:', error);
+    throw error;
+  }
+};
+
+/**
+ * Generates and downloads/saves A4 Invoice as a PDF file
+ */
+export const downloadA4InvoicePdf = async (bill: Bill, companySettings: CompanySettings) => {
+  const htmlContent = generateA4Html(bill, companySettings);
+  try {
+    const { uri } = await Print.printToFileAsync({ html: htmlContent });
+    const pdfName = `${bill.invoiceNumber || bill.id}.pdf`;
+    const destinationUri = `${FileSystem.cacheDirectory}${pdfName}`;
+    
+    // Copy file to cache directory with custom file name
+    await FileSystem.copyAsync({
+      from: uri,
+      to: destinationUri,
+    });
+
+    if (await Sharing.isAvailableAsync()) {
+      await Sharing.shareAsync(destinationUri, {
+        mimeType: 'application/pdf',
+        dialogTitle: `Download Invoice ${pdfName}`,
+        UTI: 'com.adobe.pdf',
+      });
+    } else {
+      Alert.alert('Error', 'Sharing/Saving is not available on this device');
+    }
+  } catch (error) {
+    console.error('Error generating and sharing A4 PDF:', error);
+    Alert.alert('PDF Error', 'Failed to generate invoice PDF.');
     throw error;
   }
 };

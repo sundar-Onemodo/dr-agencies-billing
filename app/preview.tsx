@@ -79,6 +79,40 @@ const numberToWords = (num: number): string => {
   return words ? words + ' Rupees only' : '';
 };
 
+const getCompanyInitials = (name: string): string => {
+  if (!name) return 'DR';
+  return name
+    .split(' ')
+    .map((word) => word[0])
+    .join('')
+    .substring(0, 3)
+    .toUpperCase();
+};
+
+const parseItemNameAndHsn = (name: string) => {
+  const hsnMatch = name.match(/(?:HSN\/SAC\s*:\s*|HSN\s*:\s*)(\d+)/i);
+  const gstMatch = name.match(/(?:GST\s*:\s*)(\d+)%/i);
+  let hsn = '';
+  let gstRate = 18;
+  let cleanName = name;
+
+  if (hsnMatch) {
+    hsn = hsnMatch[1] || hsnMatch[0];
+    cleanName = cleanName.replace(hsnMatch[0], '');
+  }
+  if (gstMatch) {
+    gstRate = parseInt(gstMatch[1], 10);
+    cleanName = cleanName.replace(gstMatch[0], '');
+  }
+
+  cleanName = cleanName
+    .replace(/\(\s*\)/g, '')
+    .replace(/,\s*,/g, ',')
+    .trim();
+
+  return { name: cleanName, hsn, gstRate };
+};
+
 export default function BillPreviewScreen() {
   const router = useRouter();
   const { billId, billData, isDraft } = useLocalSearchParams<{
@@ -114,40 +148,6 @@ export default function BillPreviewScreen() {
   });
 
   const totalGst = Object.values(groupedGst).reduce((sum, val) => sum + val, 0);
-
-  const getCompanyInitials = (name: string): string => {
-    if (!name) return 'DR';
-    return name
-      .split(' ')
-      .map((word) => word[0])
-      .join('')
-      .substring(0, 3)
-      .toUpperCase();
-  };
-
-  const parseItemNameAndHsn = (name: string) => {
-    const hsnMatch = name.match(/(?:HSN\/SAC\s*:\s*|HSN\s*:\s*)(\d+)/i);
-    const gstMatch = name.match(/(?:GST\s*:\s*)(\d+)%/i);
-    let hsn = '';
-    let gstRate = 18;
-    let cleanName = name;
-
-    if (hsnMatch) {
-      hsn = hsnMatch[1] || hsnMatch[0];
-      cleanName = cleanName.replace(hsnMatch[0], '');
-    }
-    if (gstMatch) {
-      gstRate = parseInt(gstMatch[1], 10);
-      cleanName = cleanName.replace(gstMatch[0], '');
-    }
-
-    cleanName = cleanName
-      .replace(/\(\s*\)/g, '')
-      .replace(/,\s*,/g, ',')
-      .trim();
-
-    return { name: cleanName, hsn, gstRate };
-  };
 
   const initials = getCompanyInitials(companySettings.name || 'KM');
 
@@ -327,7 +327,7 @@ Thank you for doing business!
       await BluetoothEscposPrinter.printColumn(
         colWidths,
         [BluetoothEscposPrinter.ALIGN.LEFT, BluetoothEscposPrinter.ALIGN.CENTER, BluetoothEscposPrinter.ALIGN.RIGHT],
-        ['Item / Qty', 'Price', 'Amount'],
+        ['Item / Qty (kg)', 'Price', 'Amount'],
         {}
       );
       await BluetoothEscposPrinter.printText(divider, {});
@@ -340,7 +340,7 @@ Thank you for doing business!
         await BluetoothEscposPrinter.printColumn(
           colWidths,
           [BluetoothEscposPrinter.ALIGN.LEFT, BluetoothEscposPrinter.ALIGN.CENTER, BluetoothEscposPrinter.ALIGN.RIGHT],
-          [`Qty: ${item.qty}`, item.price.toFixed(2), item.amount.toFixed(2)],
+          [`Qty: ${item.qty} kg`, item.price.toFixed(2), item.amount.toFixed(2)],
           {}
         );
       }
@@ -356,12 +356,23 @@ Thank you for doing business!
       );
       
       if (bill.gstEnabled) {
-        await BluetoothEscposPrinter.printColumn(
-          is58 ? [16, 16] : [24, 24],
-          [BluetoothEscposPrinter.ALIGN.LEFT, BluetoothEscposPrinter.ALIGN.RIGHT],
-          ['Total GST:', totalGst.toFixed(2)],
-          {}
-        );
+        for (const [rateStr, amt] of Object.entries(groupedGst)) {
+          const rate = parseFloat(rateStr);
+          const splitRate = rate / 2;
+          const splitAmt = amt / 2;
+          await BluetoothEscposPrinter.printColumn(
+            is58 ? [16, 16] : [24, 24],
+            [BluetoothEscposPrinter.ALIGN.LEFT, BluetoothEscposPrinter.ALIGN.RIGHT],
+            [`CGST (${splitRate}%):`, splitAmt.toFixed(2)],
+            {}
+          );
+          await BluetoothEscposPrinter.printColumn(
+            is58 ? [16, 16] : [24, 24],
+            [BluetoothEscposPrinter.ALIGN.LEFT, BluetoothEscposPrinter.ALIGN.RIGHT],
+            [`SGST (${splitRate}%):`, splitAmt.toFixed(2)],
+            {}
+          );
+        }
       }
       
       await BluetoothEscposPrinter.printText(divider, {});
@@ -510,7 +521,7 @@ Thank you for doing business!
                   <Text style={[styles.a4GridTh, { width: '5%', textAlign: 'center' }]}>#</Text>
                   <Text style={[styles.a4GridTh, { width: '35%', textAlign: 'left' }]}>Item name</Text>
                   <Text style={[styles.a4GridTh, { width: '12%', textAlign: 'center' }]}>HSN/ SAC</Text>
-                  <Text style={[styles.a4GridTh, { width: '10%', textAlign: 'center' }]}>Qty</Text>
+                  <Text style={[styles.a4GridTh, { width: '10%', textAlign: 'center' }]}>Qty (kg)</Text>
                   <Text style={[styles.a4GridTh, { width: '13%', textAlign: 'right' }]}>Price</Text>
                   <Text style={[styles.a4GridTh, { width: '13%', textAlign: 'right' }]}>GST</Text>
                   <Text style={[styles.a4GridTh, { width: '12%', textAlign: 'right' }]}>Amount</Text>
@@ -526,7 +537,7 @@ Thank you for doing business!
                   const itemTotalAmt = itemSubtotal + itemGstVal;
                   
                   const gstText = bill.gstEnabled 
-                    ? `₹${itemGstVal.toFixed(1)} (${gstRate}%)` 
+                    ? `₹${itemGstVal.toFixed(1)}\n(CGST ${gstRate/2}%, SGST ${gstRate/2}%)` 
                     : '₹0.0 (0%)';
 
                   return (
@@ -541,7 +552,7 @@ Thank you for doing business!
                         <Text style={styles.a4TdText}>{hsn || '21039040'}</Text>
                       </View>
                       <View style={[styles.a4GridTd, { width: '10%', alignItems: 'center' }]}>
-                        <Text style={styles.a4TdText}>{item.qty}</Text>
+                        <Text style={styles.a4TdText}>{item.qty} kg</Text>
                       </View>
                       <View style={[styles.a4GridTd, { width: '13%', alignItems: 'flex-end' }]}>
                         <Text style={styles.a4TdText}>₹{item.price.toFixed(2)}</Text>
@@ -573,7 +584,7 @@ Thank you for doing business!
                     <Text style={styles.a4TotalRowTextBold}>Total</Text>
                   </View>
                   <View style={{ width: '10%', borderRightWidth: 1, borderColor: '#000000', paddingHorizontal: 4, alignItems: 'center', justifyContent: 'center' }}>
-                    <Text style={styles.a4TotalRowTextBold}>{totalQty}</Text>
+                    <Text style={styles.a4TotalRowTextBold}>{totalQty} kg</Text>
                   </View>
                   <View style={{ width: '13%', borderRightWidth: 1, borderColor: '#000000' }} />
                   <View style={{ width: '13%', borderRightWidth: 1, borderColor: '#000000', paddingHorizontal: 4, alignItems: 'flex-end', justifyContent: 'center' }}>
@@ -595,12 +606,23 @@ Thank you for doing business!
                       <Text style={styles.a4AmountLabel}>Sub Total:</Text>
                       <Text style={styles.a4AmountValue}>₹{subtotal.toFixed(2)}</Text>
                     </View>
-                    {bill.gstEnabled && Object.entries(groupedGst).map(([rate, amt]) => (
-                      <View key={rate} style={styles.a4AmountRow}>
-                        <Text style={styles.a4AmountLabel}>GST ({rate}%):</Text>
-                        <Text style={styles.a4AmountValue}>₹{amt.toFixed(2)}</Text>
-                      </View>
-                    ))}
+                    {bill.gstEnabled && Object.entries(groupedGst).map(([rateStr, amt]) => {
+                      const rate = parseFloat(rateStr);
+                      const splitRate = rate / 2;
+                      const splitAmt = amt / 2;
+                      return (
+                        <React.Fragment key={rateStr}>
+                          <View style={styles.a4AmountRow}>
+                            <Text style={styles.a4AmountLabel}>CGST ({splitRate}%):</Text>
+                            <Text style={styles.a4AmountValue}>₹{splitAmt.toFixed(2)}</Text>
+                          </View>
+                          <View style={styles.a4AmountRow}>
+                            <Text style={styles.a4AmountLabel}>SGST ({splitRate}%):</Text>
+                            <Text style={styles.a4AmountValue}>₹{splitAmt.toFixed(2)}</Text>
+                          </View>
+                        </React.Fragment>
+                      );
+                    })}
                     <View style={styles.a4AmountRowDivider} />
                     <View style={styles.a4AmountRow}>
                       <Text style={[styles.a4AmountLabel, { fontWeight: '700' }]}>Total:</Text>
@@ -657,7 +679,7 @@ Thank you for doing business!
 
               {/* Items Table */}
               <View style={styles.tableRowHeader}>
-                <Text style={[styles.receiptText, styles.itemColHeader]}>Item / Qty</Text>
+                <Text style={[styles.receiptText, styles.itemColHeader]}>Item / Qty (kg)</Text>
                 <Text style={[styles.receiptText, styles.priceColHeader]}>Price</Text>
                 <Text style={[styles.receiptText, styles.amountColHeader]}>Amount</Text>
               </View>
@@ -667,7 +689,7 @@ Thank you for doing business!
                 <View key={item.id || index} style={styles.receiptItemRow}>
                   <View style={styles.itemCol}>
                     <Text style={styles.receiptTextBold}>{item.name}</Text>
-                    <Text style={styles.receiptSubtext}>Qty: {item.qty}</Text>
+                    <Text style={styles.receiptSubtext}>Qty: {item.qty} kg</Text>
                   </View>
                   <Text style={[styles.receiptText, styles.priceCol]}>
                     {item.price.toFixed(2)}
@@ -686,12 +708,23 @@ Thank you for doing business!
                 <Text style={styles.receiptText}>{bill.subtotal.toFixed(2)}</Text>
               </View>
 
-              {bill.gstEnabled && Object.entries(groupedGst).map(([rate, amt]) => (
-                <View key={rate} style={styles.receiptCalcRow}>
-                  <Text style={styles.receiptText}>GST ({rate}%):</Text>
-                  <Text style={styles.receiptText}>{amt.toFixed(2)}</Text>
-                </View>
-              ))}
+              {bill.gstEnabled && Object.entries(groupedGst).map(([rateStr, amt]) => {
+                const rate = parseFloat(rateStr);
+                const splitRate = rate / 2;
+                const splitAmt = amt / 2;
+                return (
+                  <React.Fragment key={rateStr}>
+                    <View style={styles.receiptCalcRow}>
+                      <Text style={styles.receiptText}>CGST ({splitRate}%):</Text>
+                      <Text style={styles.receiptText}>{splitAmt.toFixed(2)}</Text>
+                    </View>
+                    <View style={styles.receiptCalcRow}>
+                      <Text style={styles.receiptText}>SGST ({splitRate}%):</Text>
+                      <Text style={styles.receiptText}>{splitAmt.toFixed(2)}</Text>
+                    </View>
+                  </React.Fragment>
+                );
+              })}
 
               {renderDivider()}
               <View style={styles.receiptCalcRow}>

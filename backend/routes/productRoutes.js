@@ -7,5 +7,6 @@ router.post('/add', authenticateToken, productController.addProduct);
 router.get('/list', authenticateToken, productController.listProducts);
 router.put('/:id', authenticateToken, productController.updateProduct);
 router.delete('/:id', authenticateToken, productController.deleteProduct);
+router.get('/stock-ledger', authenticateToken, productController.getStockLedger);
 
 module.exports = router;

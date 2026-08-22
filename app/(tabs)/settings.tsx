@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -8,6 +8,7 @@ import {
   Alert,
   SafeAreaView,
   Platform,
+  RefreshControl,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -24,7 +25,21 @@ export default function SettingsScreen() {
     updateCompanySettings,
     printerSettings,
     logout,
+    refreshData,
   } = useBilling();
+
+  const [refreshing, setRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await refreshData();
+    } catch (e) {
+      console.warn('Settings refresh failed:', e);
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   // Local Form States
   const [name, setName] = useState(companySettings.name);
@@ -39,29 +54,45 @@ export default function SettingsScreen() {
   const [accountNo, setAccountNo] = useState(companySettings.accountNo);
   const [ifsc, setIfsc] = useState(companySettings.ifsc);
 
+  // Synchronize state with loaded companySettings from Redux/context
+  useEffect(() => {
+    setName(companySettings.name || '');
+    setAddress(companySettings.address || '');
+    setGstin(companySettings.gstin || '');
+    setPhone(companySettings.phone || '');
+    setEmail(companySettings.email || '');
+    setBankName(companySettings.bankName || '');
+    setAccountName(companySettings.accountName || '');
+    setAccountNo(companySettings.accountNo || '');
+    setIfsc(companySettings.ifsc || '');
+  }, [companySettings]);
+
   // Printer Setup Modal State
   const [printerModalVisible, setPrinterModalVisible] = useState(false);
 
   // Save Store Details
-  const handleSaveSettings = () => {
+  const handleSaveSettings = async () => {
     if (!name.trim() || !gstin.trim() || !address.trim()) {
       Alert.alert('Validation Error', 'Company Name, GSTIN, and Address are required.');
       return;
     }
 
-    updateCompanySettings({
-      name,
-      address,
-      gstin,
-      phone,
-      email,
-      bankName,
-      accountName,
-      accountNo,
-      ifsc,
-    });
-
-    Alert.alert('Settings Saved', 'Business credentials updated successfully!');
+    try {
+      await updateCompanySettings({
+        name,
+        address,
+        gstin,
+        phone,
+        email,
+        bankName,
+        accountName,
+        accountNo,
+        ifsc,
+      });
+      Alert.alert('Settings Saved', 'Business credentials updated successfully!');
+    } catch (err: any) {
+      Alert.alert('Save Error', err.message || 'Failed to save store profile.');
+    }
   };
 
   const handleLogout = () => {
@@ -86,7 +117,18 @@ export default function SettingsScreen() {
         <Text style={styles.subtitle}>Configure profile, billing, and printer interfaces</Text>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        contentContainerStyle={styles.scrollContent} 
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor="#D4AF37"
+            colors={['#D4AF37']}
+          />
+        }
+      >
         {/* Printer Setup Card */}
         <Text style={styles.sectionTitle}>Hardware Integration</Text>
         <GlassCard style={styles.printerCard} goldBorder={!!printerSettings.connectedPrinter}>

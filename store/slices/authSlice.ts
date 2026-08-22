@@ -167,7 +167,29 @@ const authSlice = createSlice({
         state.loading = false;
         state.error = action.payload as string;
         state.isInitialized = true;
-      });
+      })
+      // Matcher to automatically log out on 401 Unauthorized or expired token
+      .addMatcher(
+        (action) => action.type.endsWith('/rejected'),
+        (state, action) => {
+          const payload = action.payload as any;
+          const errorMessage = typeof payload === 'string' ? payload : (payload?.error || '');
+          if (
+            errorMessage.includes('Invalid, expired, or revoked access token') ||
+            errorMessage.includes('Access token required') ||
+            errorMessage.includes('Please authenticate') ||
+            (payload && payload.status === 401)
+          ) {
+            console.log('Token expired or unauthorized request. Logging out user...');
+            state.token = null;
+            state.user = null;
+            state.isAuthenticated = false;
+            // Clear storage
+            AsyncStorage.removeItem('token').catch(() => {});
+            AsyncStorage.removeItem('user').catch(() => {});
+          }
+        }
+      );
   },
 });
 

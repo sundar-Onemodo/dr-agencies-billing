@@ -35,6 +35,18 @@ exports.addProduct = async (req, res) => {
       return res.status(400).json({ error: error.message });
     }
 
+    try {
+      await supabase.from('product_stock_logs').insert({
+        user_id: req.user.id,
+        product_id: data.id,
+        type: 'IN',
+        quantity: parsedStock,
+        reference_id: 'INITIAL'
+      });
+    } catch (logErr) {
+      console.error('Error writing initial stock log:', logErr);
+    }
+
     return res.status(201).json({
       success: true,
       message: 'Product added successfully.',
@@ -143,6 +155,15 @@ exports.updateProduct = async (req, res) => {
   }
 
   try {
+    const { data: oldProduct } = await supabase
+      .from('products')
+      .select('stock_qty')
+      .eq('id', id)
+      .eq('user_id', req.user.id)
+      .maybeSingle();
+
+    const oldStock = oldProduct ? parseFloat(oldProduct.stock_qty || 0) : 0;
+
     const { data, error } = await supabase
       .from('products')
       .update({
@@ -160,6 +181,21 @@ exports.updateProduct = async (req, res) => {
       return res.status(400).json({ error: error.message });
     }
 
+    const diff = parsedStock - oldStock;
+    if (diff !== 0) {
+      try {
+        await supabase.from('product_stock_logs').insert({
+          user_id: req.user.id,
+          product_id: data.id,
+          type: diff > 0 ? 'IN' : 'OUT',
+          quantity: Math.abs(diff),
+          reference_id: 'MANUAL_UPDATE'
+        });
+      } catch (logErr) {
+        console.error('Error writing update stock log:', logErr);
+      }
+    }
+
     return res.status(200).json({
       success: true,
       message: 'Product updated successfully.',
@@ -175,5 +211,61 @@ exports.updateProduct = async (req, res) => {
   } catch (err) {
     console.error('Update Product Error:', err.message || err);
     return res.status(500).json({ error: 'Server error updating product.' });
+  }
+};
+
+/**
+ * Get product stock movement logs (ledger)
+ * GET /products/stock-ledger
+ */
+exports.getStockLedger = async (req, res) => {
+  const { from, to } = req.query;
+  try {
+    let query = supabase
+      .from('product_stock_logs')
+      .select(`
+        id,
+        product_id,
+        type,
+        quantity,
+        reference_id,
+        created_at,
+        products (
+          name
+        )
+      `)
+      .eq('user_id', req.user.id);
+
+    if (from && to) {
+      const fromDate = new Date(`${from}T00:00:00.000Z`).toISOString();
+      const toDate = new Date(`${to}T23:59:59.999Z`).toISOString();
+      query = query.gte('created_at', fromDate).lte('created_at', toDate);
+    }
+
+    query = query.order('created_at', { ascending: false });
+
+    const { data, error } = await query;
+
+    if (error) {
+      return res.status(400).json({ error: error.message });
+    }
+
+    const formattedLogs = data.map(log => ({
+      id: String(log.id),
+      productId: String(log.product_id),
+      productName: log.products ? log.products.name : 'Unknown Product',
+      type: log.type,
+      quantity: parseFloat(log.quantity),
+      referenceId: log.reference_id,
+      createdAt: log.created_at
+    }));
+
+    return res.status(200).json({
+      success: true,
+      logs: formattedLogs
+    });
+  } catch (err) {
+    console.error('Get Stock Ledger Error:', err.message || err);
+    return res.status(500).json({ error: 'Server error retrieving stock ledger.' });
   }
 };
