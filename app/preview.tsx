@@ -519,11 +519,12 @@ Thank you for doing business!
                 {/* Items Grid Header */}
                 <View style={styles.a4GridHeader}>
                   <Text style={[styles.a4GridTh, { width: '5%', textAlign: 'center' }]}>#</Text>
-                  <Text style={[styles.a4GridTh, { width: '35%', textAlign: 'left' }]}>Item name</Text>
-                  <Text style={[styles.a4GridTh, { width: '12%', textAlign: 'center' }]}>HSN/ SAC</Text>
+                  <Text style={[styles.a4GridTh, { width: '30%', textAlign: 'left' }]}>Item name</Text>
+                  <Text style={[styles.a4GridTh, { width: '10%', textAlign: 'center' }]}>HSN/ SAC</Text>
                   <Text style={[styles.a4GridTh, { width: '10%', textAlign: 'center' }]}>Qty (kg)</Text>
-                  <Text style={[styles.a4GridTh, { width: '13%', textAlign: 'right' }]}>Price</Text>
-                  <Text style={[styles.a4GridTh, { width: '13%', textAlign: 'right' }]}>GST</Text>
+                  <Text style={[styles.a4GridTh, { width: '11%', textAlign: 'right' }]}>Price</Text>
+                  <Text style={[styles.a4GridTh, { width: '11%', textAlign: 'right' }]}>CGST</Text>
+                  <Text style={[styles.a4GridTh, { width: '11%', textAlign: 'right' }]}>SGST</Text>
                   <Text style={[styles.a4GridTh, { width: '12%', textAlign: 'right' }]}>Amount</Text>
                 </View>
 
@@ -534,10 +535,12 @@ Thank you for doing business!
                   // Calculate dynamic per-item GST and total amount
                   const itemSubtotal = item.amount || (item.qty * item.price);
                   const itemGstVal = bill.gstEnabled ? (itemSubtotal * (gstRate / 100)) : 0;
-                  const itemTotalAmt = itemSubtotal + itemGstVal;
                   
-                  const gstText = bill.gstEnabled 
-                    ? `₹${itemGstVal.toFixed(1)}\n(CGST ${gstRate/2}%, SGST ${gstRate/2}%)` 
+                  const cgstText = bill.gstEnabled 
+                    ? `₹${(itemGstVal / 2).toFixed(1)}\n(${gstRate / 2}%)` 
+                    : '₹0.0 (0%)';
+                  const sgstText = bill.gstEnabled 
+                    ? `₹${(itemGstVal / 2).toFixed(1)}\n(${gstRate / 2}%)` 
                     : '₹0.0 (0%)';
 
                   return (
@@ -545,20 +548,23 @@ Thank you for doing business!
                       <View style={[styles.a4GridTd, { width: '5%', alignItems: 'center' }]}>
                         <Text style={styles.a4TdText}>{index + 1}</Text>
                       </View>
-                      <View style={[styles.a4GridTd, { width: '35%', alignItems: 'flex-start' }]}>
+                      <View style={[styles.a4GridTd, { width: '30%', alignItems: 'flex-start' }]}>
                         <Text style={[styles.a4TdText, { fontWeight: '600' }]} numberOfLines={2}>{name}</Text>
                       </View>
-                      <View style={[styles.a4GridTd, { width: '12%', alignItems: 'center' }]}>
+                      <View style={[styles.a4GridTd, { width: '10%', alignItems: 'center' }]}>
                         <Text style={styles.a4TdText}>{hsn || '21039040'}</Text>
                       </View>
                       <View style={[styles.a4GridTd, { width: '10%', alignItems: 'center' }]}>
                         <Text style={styles.a4TdText}>{item.qty} kg</Text>
                       </View>
-                      <View style={[styles.a4GridTd, { width: '13%', alignItems: 'flex-end' }]}>
+                      <View style={[styles.a4GridTd, { width: '11%', alignItems: 'flex-end' }]}>
                         <Text style={styles.a4TdText}>₹{item.price.toFixed(2)}</Text>
                       </View>
-                      <View style={[styles.a4GridTd, { width: '13%', alignItems: 'flex-end' }]}>
-                        <Text style={styles.a4TdText} numberOfLines={1}>{gstText}</Text>
+                      <View style={[styles.a4GridTd, { width: '11%', alignItems: 'flex-end' }]}>
+                        <Text style={styles.a4TdText} numberOfLines={2}>{cgstText}</Text>
+                      </View>
+                      <View style={[styles.a4GridTd, { width: '11%', alignItems: 'flex-end' }]}>
+                        <Text style={styles.a4TdText} numberOfLines={2}>{sgstText}</Text>
                       </View>
                       <View style={[styles.a4GridTd, { width: '12%', alignItems: 'flex-end', borderRightWidth: 0 }]}>
                         <Text style={styles.a4TdText}>₹{itemSubtotal.toFixed(2)}</Text>
@@ -567,28 +573,31 @@ Thank you for doing business!
                   );
                 })}
 
-                {/* Items Grid Spacer (simulates extended lines if few items) */}
                 <View style={[styles.a4GridSpacer, { height: Math.max(40, 160 - (bill.items.length * 35)) }]}>
                   <View style={{ width: '5%', borderRightWidth: 1, borderColor: '#000000' }} />
-                  <View style={{ width: '35%', borderRightWidth: 1, borderColor: '#000000' }} />
-                  <View style={{ width: '12%', borderRightWidth: 1, borderColor: '#000000' }} />
+                  <View style={{ width: '30%', borderRightWidth: 1, borderColor: '#000000' }} />
                   <View style={{ width: '10%', borderRightWidth: 1, borderColor: '#000000' }} />
-                  <View style={{ width: '13%', borderRightWidth: 1, borderColor: '#000000' }} />
-                  <View style={{ width: '13%', borderRightWidth: 1, borderColor: '#000000' }} />
+                  <View style={{ width: '10%', borderRightWidth: 1, borderColor: '#000000' }} />
+                  <View style={{ width: '11%', borderRightWidth: 1, borderColor: '#000000' }} />
+                  <View style={{ width: '11%', borderRightWidth: 1, borderColor: '#000000' }} />
+                  <View style={{ width: '11%', borderRightWidth: 1, borderColor: '#000000' }} />
                   <View style={{ width: '12%' }} />
                 </View>
 
                 {/* Items Grid Total Row */}
                 <View style={styles.a4GridTotalRow}>
-                  <View style={{ width: '52%', paddingHorizontal: 4, justifyContent: 'center' }}>
+                  <View style={{ width: '45%', paddingHorizontal: 4, justifyContent: 'center' }}>
                     <Text style={styles.a4TotalRowTextBold}>Total</Text>
                   </View>
                   <View style={{ width: '10%', borderRightWidth: 1, borderColor: '#000000', paddingHorizontal: 4, alignItems: 'center', justifyContent: 'center' }}>
                     <Text style={styles.a4TotalRowTextBold}>{totalQty} kg</Text>
                   </View>
-                  <View style={{ width: '13%', borderRightWidth: 1, borderColor: '#000000' }} />
-                  <View style={{ width: '13%', borderRightWidth: 1, borderColor: '#000000', paddingHorizontal: 4, alignItems: 'flex-end', justifyContent: 'center' }}>
-                    <Text style={styles.a4TotalRowTextBold} numberOfLines={1}>₹{totalGst.toFixed(2)}</Text>
+                  <View style={{ width: '11%', borderRightWidth: 1, borderColor: '#000000' }} />
+                  <View style={{ width: '11%', borderRightWidth: 1, borderColor: '#000000', paddingHorizontal: 4, alignItems: 'flex-end', justifyContent: 'center' }}>
+                    <Text style={styles.a4TotalRowTextBold} numberOfLines={1}>₹{(totalGst / 2).toFixed(2)}</Text>
+                  </View>
+                  <View style={{ width: '11%', borderRightWidth: 1, borderColor: '#000000', paddingHorizontal: 4, alignItems: 'flex-end', justifyContent: 'center' }}>
+                    <Text style={styles.a4TotalRowTextBold} numberOfLines={1}>₹{(totalGst / 2).toFixed(2)}</Text>
                   </View>
                   <View style={{ width: '12%', paddingHorizontal: 4, alignItems: 'flex-end', justifyContent: 'center' }}>
                     <Text style={styles.a4TotalRowTextBold} numberOfLines={1}>₹{subtotal.toFixed(2)}</Text>

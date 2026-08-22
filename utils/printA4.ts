@@ -1,6 +1,6 @@
 import { Bill, CompanySettings } from '@/context/BillingContext';
-import * as Print from 'expo-print';
 import * as FileSystem from 'expo-file-system';
+import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { Alert } from 'react-native';
 import { parseCustomerInfo } from './customer';
@@ -169,8 +169,11 @@ export const generateA4Html = (bill: Bill, companySettings: CompanySettings): st
       groupedGst[gstRate] = (groupedGst[gstRate] || 0) + itemGstVal;
     }
 
-    const gstDisplay = bill.gstEnabled
-      ? `₹${itemGstVal.toFixed(2)}<br/><span style="font-size: 8px; color: #555;">CGST ${gstRate / 2}%, SGST ${gstRate / 2}%</span>`
+    const cgstDisplay = bill.gstEnabled
+      ? `₹${(itemGstVal / 2).toFixed(2)}<br/><span style="font-size: 8px; color: #555;">${gstRate / 2}%</span>`
+      : '₹0.00 (0%)';
+    const sgstDisplay = bill.gstEnabled
+      ? `₹${(itemGstVal / 2).toFixed(2)}<br/><span style="font-size: 8px; color: #555;">${gstRate / 2}%</span>`
       : '₹0.00 (0%)';
 
     return `
@@ -182,7 +185,8 @@ export const generateA4Html = (bill: Bill, companySettings: CompanySettings): st
         <td style="text-align: center;">${hsn || '21039040'}</td>
         <td style="text-align: center;">${item.qty} kg</td>
         <td style="text-align: right;">₹${item.price.toFixed(2)}</td>
-        <td style="text-align: right;">${gstDisplay}</td>
+        <td style="text-align: right;">${cgstDisplay}</td>
+        <td style="text-align: right;">${sgstDisplay}</td>
         <td style="text-align: right;">₹${itemSubtotal.toFixed(2)}</td>
       </tr>
     `;
@@ -535,7 +539,7 @@ export const generateA4Html = (bill: Bill, companySettings: CompanySettings): st
                   <div class="company-subtext">${companySettings.address}</div>
                   <div class="company-subtext">Email: ${companySettings.email || 'dragencies6250@gmail.com'}</div>
                   <div class="company-subtext" style="font-weight: bold;">GSTIN: ${companySettings.gstin}</div>
-                  <div class="company-subtext">Phone No: +91 ${companySettings.phone}</div>
+                  <div class="company-subtext">Phone No: ${companySettings.phone}</div>
                 </div>
               </div>
             </td>
@@ -575,11 +579,12 @@ export const generateA4Html = (bill: Bill, companySettings: CompanySettings): st
           <thead>
             <tr>
               <th style="width: 5%;">#</th>
-              <th style="width: 35%; text-align: left;">Item name</th>
-              <th style="width: 12%;">HSN/ SAC</th>
+              <th style="width: 30%; text-align: left;">Item name</th>
+              <th style="width: 10%;">HSN/ SAC</th>
               <th style="width: 10%;">Quantity (kg)</th>
-              <th style="width: 13%; text-align: right;">Price</th>
-              <th style="width: 13%; text-align: right;">GST</th>
+              <th style="width: 11%; text-align: right;">Price</th>
+              <th style="width: 11%; text-align: right;">CGST</th>
+              <th style="width: 11%; text-align: right;">SGST</th>
               <th style="width: 12%; text-align: right;">Amount</th>
             </tr>
           </thead>
@@ -593,13 +598,15 @@ export const generateA4Html = (bill: Bill, companySettings: CompanySettings): st
               <td></td>
               <td></td>
               <td></td>
+              <td></td>
             </tr>
             <tr class="total-row">
               <td colspan="2" style="text-align: left;">Total</td>
               <td></td>
               <td style="text-align: center;">${totalQty} kg</td>
               <td></td>
-              <td style="text-align: right;">₹${totalGst.toFixed(2)}</td>
+              <td style="text-align: right;">₹${(totalGst / 2).toFixed(2)}</td>
+              <td style="text-align: right;">₹${(totalGst / 2).toFixed(2)}</td>
               <td style="text-align: right;">${formatCurrencyVal(subtotal)}</td>
             </tr>
           </tbody>
@@ -676,7 +683,7 @@ export const downloadA4InvoicePdf = async (bill: Bill, companySettings: CompanyS
     const { uri } = await Print.printToFileAsync({ html: htmlContent });
     const pdfName = `${bill.invoiceNumber || bill.id}.pdf`;
     const destinationUri = `${FileSystem.cacheDirectory}${pdfName}`;
-    
+
     // Copy file to cache directory with custom file name
     await FileSystem.copyAsync({
       from: uri,
