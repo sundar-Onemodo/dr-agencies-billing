@@ -654,8 +654,12 @@ export const generateA4Html = (bill: Bill, companySettings: CompanySettings): st
               <div>Account holder's name : <strong>${companySettings.accountName || companySettings.name || 'KRISHNA MARKETING AGENCY'}</strong></div>
             </td>
             <td class="terms-box">
-              <div class="terms-title">Terms and conditions</div>
-              <div style="font-size: 9px; color: #444444;">Thanks for doing business with us!</div>
+              <div class="terms-title">Terms & Conditions:</div>
+              <div style="font-size: 8px; color: #444444; line-height: 1.3; margin-top: 4px;">
+                1. Goods once sold will not be taken back or exchanged.<br/>
+                2. Interest @ 18% p.a. will be charged after due date.<br/>
+                3. All disputes are subject to Madurai jurisdiction.
+              </div>
             </td>
             <td style="width: 30%; padding: 4px;">
               <div class="signatory-box">

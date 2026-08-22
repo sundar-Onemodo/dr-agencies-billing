@@ -1,22 +1,22 @@
-import React, { useEffect, useState } from 'react';
-import {
-  StyleSheet,
-  Text,
-  View,
-  ScrollView,
-  TouchableOpacity,
-  SafeAreaView,
-  Platform,
-  Alert,
-  Share,
-} from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import Ionicons from '@expo/vector-icons/Ionicons';
-import { useBilling, Bill } from '@/context/BillingContext';
 import { GoldButton } from '@/components/ui/GoldButton';
-import { BluetoothEscposPrinter } from 'react-native-bluetooth-escpos-printer';
+import { Bill, useBilling } from '@/context/BillingContext';
 import { parseCustomerInfo } from '@/utils/customer';
 import { printA4Invoice } from '@/utils/printA4';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import React, { useEffect, useState } from 'react';
+import {
+  Alert,
+  Platform,
+  SafeAreaView,
+  ScrollView,
+  Share,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { BluetoothEscposPrinter } from 'react-native-bluetooth-escpos-printer';
 
 const numberToWords = (num: number): string => {
   const a = [
@@ -493,7 +493,7 @@ Thank you for doing business!
                         <Text style={styles.a4SellerDetailText}>{companySettings.address}</Text>
                         <Text style={styles.a4SellerDetailText}>Email: {companySettings.email || 'krishnamarketingagency6@gmail.com'}</Text>
                         <Text style={[styles.a4SellerDetailText, { fontWeight: '700' }]}>GSTIN: {companySettings.gstin}</Text>
-                        <Text style={styles.a4SellerDetailText}>State: 33-Tamil Nadu</Text>
+                        <Text style={styles.a4SellerDetailText}>State: Tamil Nadu</Text>
                       </View>
                     </View>
                   </View>
@@ -512,7 +512,7 @@ Thank you for doing business!
                     </View>
                     <View style={styles.a4PlaceOfSupplyBox}>
                       <Text style={styles.a4MetaHeader}>Place of supply</Text>
-                      <Text style={styles.a4MetaText}>33-Tamil Nadu</Text>
+                      <Text style={styles.a4MetaText}>Tamil Nadu</Text>
                     </View>
                   </View>
                 </View>
@@ -524,7 +524,7 @@ Thank you for doing business!
                   <Text style={styles.a4BillToText}>{cleanAddress || 'PALAGANATHAM'}</Text>
                   <Text style={styles.a4BillToText}>Contact No.: {phone}</Text>
                   <Text style={styles.a4BillToText}>GSTIN : {customer.gstin || '33KSBPS0649G1ZL'}</Text>
-                  <Text style={styles.a4BillToText}>State: {customer.state || '33-Tamil Nadu'}</Text>
+                  <Text style={styles.a4BillToText}>State: {customer.state || 'Tamil Nadu'}</Text>
                 </View>
 
                 {/* Items Grid Header */}
@@ -670,9 +670,8 @@ Thank you for doing business!
 
                   {/* Terms */}
                   <View style={styles.a4FooterTermsBox}>
-                    <Text style={styles.a4FooterBoxTitle}>Terms and conditions</Text>
-                    <Text style={styles.a4TermsText}>Thanks for doing business with us!</Text>
-                  </View>
+                    <Text style={styles.a4FooterBoxTitle}>Terms & Conditions:</Text>
+                    <Text style={styles.a4TermsText}>Goods once sold will not be taken back or exchanged.</Text>
 
                   {/* Signatory */}
                   <View style={styles.a4FooterSignatoryBox}>
