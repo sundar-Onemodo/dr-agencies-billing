@@ -218,6 +218,17 @@ export const generateA4Html = (bill: Bill, companySettings: CompanySettings): st
     `;
   }).join('') : '';
 
+  const expectedTotal = subtotal + totalGst;
+  const roundOff = bill.total - expectedTotal;
+  const roundOffHtml = Math.abs(roundOff) > 0.009
+    ? `
+      <div class="amounts-row">
+        <span>Round Off:</span>
+        <span style="font-weight: bold;">${roundOff > 0 ? '+' : ''}${roundOff.toFixed(2)}</span>
+      </div>
+    `
+    : '';
+
   return `
     <!DOCTYPE html>
     <html lang="en">
@@ -624,6 +635,7 @@ export const generateA4Html = (bill: Bill, companySettings: CompanySettings): st
                 <span style="font-weight: bold;">${formatCurrencyVal(subtotal)}</span>
               </div>
               ${gstRowsHtml}
+              ${roundOffHtml}
               <div class="amounts-row bold-row">
                 <span>Total:</span>
                 <span>${formatCurrencyVal(bill.total)}</span>

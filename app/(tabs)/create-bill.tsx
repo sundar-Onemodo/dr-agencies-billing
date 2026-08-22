@@ -203,7 +203,9 @@ export default function CreateBillScreen() {
   const totalGst = Object.values(groupedGst).reduce((sum, val) => sum + val, 0);
   const cgst = totalGst / 2;
   const sgst = totalGst / 2;
-  const total = subtotal + totalGst;
+  const rawTotal = subtotal + totalGst;
+  const total = Math.round(rawTotal);
+  const roundOff = total - rawTotal;
 
   // Dynamic GST Toggle Title
   const currentGstRates: number[] = [];
@@ -1005,6 +1007,15 @@ export default function CreateBillScreen() {
                 </React.Fragment>
               );
             })}
+
+            {Math.abs(roundOff) > 0.009 && (
+              <View style={styles.summaryRow}>
+                <Text style={styles.taxLabel}>Round Off</Text>
+                <Text style={styles.taxValue}>
+                  {roundOff > 0 ? '+' : ''}{roundOff.toFixed(2)}
+                </Text>
+              </View>
+            )}
 
             <View style={styles.totalDivider} />
             <View style={styles.summaryRow}>

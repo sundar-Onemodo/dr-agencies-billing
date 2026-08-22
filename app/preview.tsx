@@ -148,6 +148,8 @@ export default function BillPreviewScreen() {
   });
 
   const totalGst = Object.values(groupedGst).reduce((sum, val) => sum + val, 0);
+  const expectedTotal = subtotal + totalGst;
+  const roundOff = (bill?.total || 0) - expectedTotal;
 
   const initials = getCompanyInitials(companySettings.name || 'KM');
 
@@ -373,6 +375,15 @@ Thank you for doing business!
             {}
           );
         }
+      }
+      
+      if (Math.abs(roundOff) > 0.009) {
+        await BluetoothEscposPrinter.printColumn(
+          is58 ? [16, 16] : [24, 24],
+          [BluetoothEscposPrinter.ALIGN.LEFT, BluetoothEscposPrinter.ALIGN.RIGHT],
+          ['Round Off:', `${roundOff > 0 ? '+' : ''}${roundOff.toFixed(2)}`],
+          {}
+        );
       }
       
       await BluetoothEscposPrinter.printText(divider, {});
@@ -632,6 +643,12 @@ Thank you for doing business!
                         </React.Fragment>
                       );
                     })}
+                    {Math.abs(roundOff) > 0.009 && (
+                      <View style={styles.a4AmountRow}>
+                        <Text style={styles.a4AmountLabel}>Round Off:</Text>
+                        <Text style={styles.a4AmountValue}>{roundOff > 0 ? '+' : ''}{roundOff.toFixed(2)}</Text>
+                      </View>
+                    )}
                     <View style={styles.a4AmountRowDivider} />
                     <View style={styles.a4AmountRow}>
                       <Text style={[styles.a4AmountLabel, { fontWeight: '700' }]}>Total:</Text>
@@ -735,6 +752,14 @@ Thank you for doing business!
                 );
               })}
 
+              {Math.abs(roundOff) > 0.009 && (
+                <View style={styles.receiptCalcRow}>
+                  <Text style={styles.receiptText}>Round Off:</Text>
+                  <Text style={styles.receiptText}>
+                    {roundOff > 0 ? '+' : ''}{roundOff.toFixed(2)}
+                  </Text>
+                </View>
+              )}
               {renderDivider()}
               <View style={styles.receiptCalcRow}>
                 <Text style={styles.receiptTextBoldBig}>GRAND TOTAL:</Text>
