@@ -1,12 +1,14 @@
 import { GoldButton } from '@/components/ui/GoldButton';
 import { Bill, useBilling } from '@/context/BillingContext';
 import { useAlert } from '@/context/AlertContext';
+import { BILLING_APP_LOGO_RAW_BASE64 } from '@/assets/images/billingAppLogoBase64';
 import { parseCustomerInfo } from '@/utils/customer';
 import { printA4Invoice } from '@/utils/printA4';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
+  Image,
   Platform,
   SafeAreaView,
   ScrollView,
@@ -295,6 +297,17 @@ Thank you for doing business!
       const is58 = printerSettings.paperSize === '58mm';
       const colWidths = is58 ? [16, 6, 10] : [24, 8, 16]; // Columns layout for 32 vs 48 chars width
       
+      // Print app logo image if supported by printer
+      try {
+        await BluetoothEscposPrinter.printPic(BILLING_APP_LOGO_RAW_BASE64, {
+          width: is58 ? 140 : 180,
+          left: 0,
+        });
+      } catch (logoErr) {
+        // Fallback silently if hardware printer does not support raster bit-images
+        console.log('Bit-image printing skipped or unsupported:', logoErr);
+      }
+
       // 2. Print Header
       await BluetoothEscposPrinter.setBlob(1); // Set Bold
       await BluetoothEscposPrinter.printText(`${companySettings.name}\n`, {
@@ -487,9 +500,11 @@ Thank you for doing business!
                   {/* Left Column: Seller Details */}
                   <View style={styles.a4SellerCol}>
                     <View style={styles.a4LogoAndNameRow}>
-                      <View style={styles.a4LogoCircle}>
-                        <Text style={styles.a4LogoText}>{initials}</Text>
-                      </View>
+                      <Image
+                        source={require('@/assets/images/billing_app.png')}
+                        style={styles.a4AppLogo}
+                        resizeMode="contain"
+                      />
                       <View style={{ flex: 1 }}>
                         <Text style={styles.a4SellerName}>{companySettings.name}</Text>
                         <Text style={styles.a4SellerDetailText}>{companySettings.address}</Text>
@@ -687,6 +702,13 @@ Thank you for doing business!
           ) : (
             <View style={{ width: '100%' }}>
               {/* Header */}
+              <View style={styles.receiptLogoWrapper}>
+                <Image
+                  source={require('@/assets/images/billing_app.png')}
+                  style={styles.receiptAppLogo}
+                  resizeMode="contain"
+                />
+              </View>
               <Text style={styles.receiptHeaderName}>{companySettings.name}</Text>
               <Text style={styles.receiptHeaderDetail}>{companySettings.address}</Text>
               <Text style={styles.receiptHeaderDetail}>Phone: {companySettings.phone}</Text>
@@ -1292,20 +1314,19 @@ const styles = StyleSheet.create({
     color: '#000000',
     textAlign: 'center',
   },
-  a4LogoCircle: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    borderWidth: 1,
-    borderColor: '#007aff',
-    backgroundColor: '#fcfcfc',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 6,
+  a4AppLogo: {
+    width: 44,
+    height: 44,
+    borderRadius: 8,
+    marginRight: 8,
   },
-  a4LogoText: {
-    fontSize: 10,
-    fontWeight: '900',
-    color: '#007aff',
+  receiptLogoWrapper: {
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  receiptAppLogo: {
+    width: 44,
+    height: 44,
+    borderRadius: 8,
   },
 });

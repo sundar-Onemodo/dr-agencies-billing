@@ -1,4 +1,5 @@
 import { CompanySettings } from '@/context/BillingContext';
+import { BILLING_APP_LOGO_BASE64 } from '@/assets/images/billingAppLogoBase64';
 import { Customer, CustomerPayment } from '@/store/slices/customerSlice';
 import * as FileSystem from 'expo-file-system';
 import * as Print from 'expo-print';
@@ -400,7 +401,7 @@ export const generateCustomerLedgerHtml = (
           <tr>
             <td class="company-col">
               <div class="logo-row">
-                <div class="logo-circle">${initials}</div>
+                <img src="${BILLING_APP_LOGO_BASE64}" width="50" height="50" style="object-fit: contain; border-radius: 8px; margin-right: 12px; display: block;" alt="App Logo" />
                 <div>
                   <h2 class="company-name">${companySettings.name}</h2>
                   <div class="company-text">${companySettings.address}</div>

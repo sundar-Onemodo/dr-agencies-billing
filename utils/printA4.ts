@@ -1,3 +1,4 @@
+import { BILLING_APP_LOGO_BASE64 } from '@/assets/images/billingAppLogoBase64';
 import { Bill, CompanySettings } from '@/context/BillingContext';
 import * as FileSystem from 'expo-file-system';
 import * as Print from 'expo-print';
@@ -535,14 +536,7 @@ export const generateA4Html = (bill: Bill, companySettings: CompanySettings): st
             <td class="company-details-col">
               <div class="logo-container">
                 <div class="logo-box">
-                  <svg width="45" height="45" viewBox="0 0 100 100" style="display: inline-block;">
-                    <circle cx="50" cy="50" r="45" fill="#fcfcfc" stroke="#dddddd" stroke-width="1.5"/>
-                    <circle cx="50" cy="50" r="41" fill="none" stroke="#007aff" stroke-width="2"/>
-                    <path d="M 25 65 L 45 45 L 60 52 L 75 32" fill="none" stroke="#ff8a00" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
-                    <path d="M 67 32 L 75 32 L 75 40" fill="none" stroke="#ff8a00" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
-                    <path d="M 25 72 L 40 55 L 55 60 L 75 40" fill="none" stroke="#007aff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-                    <text x="50" y="85" font-family="'Outfit', sans-serif" font-size="9" font-weight="900" fill="#007aff" text-anchor="middle">${initials}</text>
-                  </svg>
+                  <img src="${BILLING_APP_LOGO_BASE64}" width="52" height="52" style="object-fit: contain; border-radius: 8px; display: block;" alt="App Logo" />
                 </div>
                 <div class="company-info">
                   <h1 class="company-name">${companySettings.name}</h1>
@@ -655,14 +649,12 @@ export const generateA4Html = (bill: Bill, companySettings: CompanySettings): st
             <td class="terms-box">
               <div class="terms-title">Terms & Conditions:</div>
               <div style="font-size: 8px; color: #444444; line-height: 1.3; margin-top: 4px;">
-                1. Goods once sold will not be taken back or exchanged.<br/>
-                2. Interest @ 18% p.a. will be charged after due date.<br/>
-                3. All disputes are subject to Madurai jurisdiction.
+                Goods once sold will not be taken back or exchanged.<br/>
               </div>
             </td>
             <td style="width: 30%; padding: 4px;">
               <div class="signatory-box">
-                <div class="signatory-company">For : ${companySettings.name || 'KRISHNA MARKETING AGENCY'}</div>
+                <div class="signatory-company">For : ${companySettings.name}</div>
                 <div class="signatory-title">Authorized Signatory</div>
               </div>
             </td>

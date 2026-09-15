@@ -4,7 +4,7 @@
     "slug": "billing-app",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/billing_app.png",
     "scheme": "billingapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": false,
@@ -13,8 +13,8 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "foregroundImage": "./assets/images/billing_app.png",
+        "backgroundColor": "#000000"
       },
       "edgeToEdgeEnabled": false,
       "package": "com.shreedhar_t.billingapp",
@@ -36,10 +36,10 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-icon.png",
+          "image": "./assets/images/billing_app.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#ffffff"
+          "backgroundColor": "#000000"
         }
       ],
       "expo-asset"
