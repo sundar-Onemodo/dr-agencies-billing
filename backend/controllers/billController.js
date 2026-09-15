@@ -583,3 +583,322 @@ exports.deleteBill = async (req, res) => {
     return res.status(500).json({ error: 'Server error deleting invoice.' });
   }
 };
+
+/**
+ * Update an existing bill (invoice) and adjust stock levels & customer associations
+ * PUT /bills/:id
+ */
+exports.updateBill = async (req, res) => {
+  const { id } = req.params;
+  const {
+    customerName,
+    customer_name,
+    items,
+    subtotal,
+    cgst,
+    sgst,
+    total,
+    paymentStatus,
+    payment_status
+  } = req.body;
+
+  const finalCustomerName = customerName || customer_name;
+  if (!finalCustomerName || !items || !Array.isArray(items) || items.length === 0) {
+    return res.status(400).json({ error: 'Customer name and a non-empty items array are required.' });
+  }
+
+  if (subtotal === undefined || total === undefined) {
+    return res.status(400).json({ error: 'Subtotal and total are required.' });
+  }
+
+  try {
+    // 1. Fetch all user products for robust ID matching and stock tracking
+    const { data: allUserProducts } = await supabase
+      .from('products')
+      .select('id, name, stock_qty')
+      .eq('user_id', req.user.id);
+
+    const resolveProductId = (itemOrId, itemName) => {
+      if (typeof itemOrId === 'object' && itemOrId !== null) {
+        const rawId = itemOrId.productId || itemOrId.product_id;
+        if (rawId && rawId !== 'null' && rawId !== '') return parseInt(rawId, 10);
+        itemName = itemOrId.name || itemName;
+      } else if (itemOrId && itemOrId !== 'null' && itemOrId !== '') {
+        return parseInt(itemOrId, 10);
+      }
+      if (!itemName || !allUserProducts) return null;
+      const cleanItemName = itemName.replace(/\(.*?\)/g, '').trim().toLowerCase();
+      const matched = allUserProducts.find(p => {
+        const cleanProdName = p.name.replace(/\(.*?\)/g, '').trim().toLowerCase();
+        return cleanProdName === cleanItemName || cleanItemName.includes(cleanProdName) || cleanProdName.includes(cleanItemName);
+      });
+      return matched ? matched.id : null;
+    };
+
+    // 2. Fetch existing bill and its current items
+    const { data: existingBill, error: fetchBillError } = await supabase
+      .from('bills')
+      .select(`
+        *,
+        bill_items (*)
+      `)
+      .eq('id', id)
+      .eq('user_id', req.user.id)
+      .maybeSingle();
+
+    if (fetchBillError) {
+      return res.status(400).json({ error: fetchBillError.message });
+    }
+
+    if (!existingBill) {
+      return res.status(404).json({ error: 'Invoice not found or unauthorized.' });
+    }
+
+    // 3. Temporarily restore previous stock for old items so we can re-evaluate available stock cleanly
+    const oldItems = existingBill.bill_items || [];
+    const restoredOldProducts = [];
+    for (const oldItem of oldItems) {
+      const oldProdId = resolveProductId(oldItem.product_id, oldItem.name);
+      if (oldProdId) {
+        const quantity = parseFloat(oldItem.quantity || 1);
+        await supabase.rpc('decrement_product_stock', {
+          p_id: parseInt(oldProdId, 10),
+          p_qty: -quantity, // Negative quantity reverts/adds stock back
+          p_user_id: req.user.id
+        });
+        restoredOldProducts.push({ id: oldProdId, qty: quantity });
+      }
+    }
+
+    // 4. Fetch latest stock levels after restore to validate new item quantities
+    const newItemsWithProdIds = items.map(item => ({
+      ...item,
+      resolvedProductId: resolveProductId(item)
+    }));
+
+    const relevantProductIds = newItemsWithProdIds
+      .map(it => it.resolvedProductId)
+      .filter(Boolean);
+
+    let dbProducts = [];
+    if (relevantProductIds.length > 0) {
+      const { data: prods, error: fetchProdsErr } = await supabase
+        .from('products')
+        .select('id, name, stock_qty')
+        .in('id', relevantProductIds)
+        .eq('user_id', req.user.id);
+
+      if (fetchProdsErr) {
+        // Rollback restored stock before error return
+        for (const old of restoredOldProducts) {
+          await supabase.rpc('decrement_product_stock', {
+            p_id: parseInt(old.id, 10),
+            p_qty: parseFloat(old.qty),
+            p_user_id: req.user.id
+          });
+        }
+        return res.status(400).json({ error: `Failed to verify stock: ${fetchProdsErr.message}` });
+      }
+      dbProducts = prods || [];
+    }
+
+    // 4.1 Aggregate requested quantities per product ID to handle validation and deduction accurately
+    const requestedProductTotals = {};
+    for (const item of newItemsWithProdIds) {
+      if (item.resolvedProductId) {
+        const pId = String(item.resolvedProductId);
+        const quantity = parseFloat(item.qty || item.quantity || 1);
+        requestedProductTotals[pId] = (requestedProductTotals[pId] || 0) + quantity;
+      }
+    }
+
+    // Validate if total requested quantity for any product exceeds restored available stock
+    for (const [pId, totalRequested] of Object.entries(requestedProductTotals)) {
+      const dbProd = dbProducts.find(p => String(p.id) === pId);
+      const stockQty = dbProd ? parseFloat(dbProd.stock_qty || 0) : 0;
+      if (totalRequested > stockQty) {
+        // Rollback restored stock before error return
+        for (const old of restoredOldProducts) {
+          await supabase.rpc('decrement_product_stock', {
+            p_id: parseInt(old.id, 10),
+            p_qty: parseFloat(old.qty),
+            p_user_id: req.user.id
+          });
+        }
+        return res.status(400).json({
+          error: `Insufficient stock for "${dbProd ? dbProd.name : 'product'}". Available in store: ${stockQty} kg, Requested total: ${totalRequested} kg`
+        });
+      }
+    }
+
+    // 5. Deduct new stock for items (in aggregate per product)
+    for (const [pId, totalRequested] of Object.entries(requestedProductTotals)) {
+      await supabase.rpc('decrement_product_stock', {
+        p_id: parseInt(pId, 10),
+        p_qty: totalRequested,
+        p_user_id: req.user.id
+      });
+    }
+
+    // 6. Log stock updates in product_stock_logs
+    try {
+      const updateLogs = newItemsWithProdIds.map(item => {
+        if (item.resolvedProductId) {
+          return {
+            user_id: req.user.id,
+            product_id: parseInt(item.resolvedProductId, 10),
+            type: 'OUT',
+            quantity: parseFloat(item.qty || item.quantity || 1),
+            reference_id: `UPDATE-BILL-${existingBill.invoice_number}`
+          };
+        }
+        return null;
+      }).filter(Boolean);
+
+      if (updateLogs.length > 0) {
+        await supabase.from('product_stock_logs').insert(updateLogs);
+      }
+    } catch (logErr) {
+      console.error('Error logging stock updates on bill update:', logErr);
+    }
+
+    // 7. Handle customer lookup/creation
+    let name = finalCustomerName;
+    let address = '';
+    let gstin = '';
+    let state = 'Tamil Nadu';
+    let phone = '';
+    if (finalCustomerName.includes('||')) {
+      const parts = finalCustomerName.split('||');
+      name = parts[0] || '';
+      address = parts[1] || '';
+      gstin = parts[2] || '';
+      state = parts[3] || 'Tamil Nadu';
+      phone = parts[4] || '';
+      if (!phone && address) {
+        const phoneMatch = address.match(/\b\d{10}\b/);
+        if (phoneMatch) phone = phoneMatch[0];
+      }
+    }
+
+    let customerId = existingBill.customer_id;
+    try {
+      const { data: existingCustomer } = await supabase
+        .from('customers')
+        .select('id, phone')
+        .eq('user_id', req.user.id)
+        .eq('name', name.trim())
+        .maybeSingle();
+
+      if (existingCustomer) {
+        customerId = existingCustomer.id;
+        const updatePayload = { address, gstin, state, updated_at: new Date().toISOString() };
+        if (phone) updatePayload.phone = phone;
+        await supabase.from('customers').update(updatePayload).eq('id', customerId);
+      } else {
+        const { data: newCustomer } = await supabase
+          .from('customers')
+          .insert({
+            user_id: req.user.id,
+            name: name.trim(),
+            phone: phone || '',
+            address,
+            gstin,
+            state,
+            total_received: 0.00
+          })
+          .select()
+          .single();
+
+        if (newCustomer) customerId = newCustomer.id;
+      }
+    } catch (custErr) {
+      console.error('Error updating customer on bill update:', custErr);
+    }
+
+    // 8. Update main bill record
+    const finalPaymentStatus = paymentStatus || payment_status || existingBill.payment_status || 'Pending';
+    const updateBillPayload = {
+      customer_name: finalCustomerName,
+      customer_id: customerId,
+      subtotal: parseFloat(subtotal),
+      cgst: parseFloat(cgst || 0),
+      sgst: parseFloat(sgst || 0),
+      total: parseFloat(total),
+      payment_status: finalPaymentStatus,
+      updated_at: new Date().toISOString()
+    };
+
+    const { data: updatedBillRecord, error: updateBillErr } = await supabase
+      .from('bills')
+      .update(updateBillPayload)
+      .eq('id', id)
+      .eq('user_id', req.user.id)
+      .select()
+      .single();
+
+    if (updateBillErr) {
+      return res.status(400).json({ error: updateBillErr.message });
+    }
+
+    // 9. Replace bill_items: delete old items and insert new ones
+    await supabase.from('bill_items').delete().eq('bill_id', id);
+
+    const billItemsData = newItemsWithProdIds.map(item => {
+      const quantity = parseFloat(item.qty || item.quantity || 1);
+      const price = parseFloat(item.price || 0);
+      const amount = parseFloat(item.amount || (quantity * price));
+
+      return {
+        bill_id: id,
+        product_id: item.resolvedProductId,
+        name: item.name || 'Unknown Product',
+        quantity,
+        price,
+        amount
+      };
+    });
+
+    const { data: insertedItems, error: insertItemsErr } = await supabase
+      .from('bill_items')
+      .insert(billItemsData)
+      .select();
+
+    if (insertItemsErr) {
+      return res.status(400).json({ error: `Failed to save updated bill items: ${insertItemsErr.message}` });
+    }
+
+    // 9. Format response
+    const formattedBill = {
+      id: String(updatedBillRecord.id),
+      invoiceNumber: updatedBillRecord.invoice_number,
+      customerName: updatedBillRecord.customer_name,
+      date: updatedBillRecord.created_at,
+      subtotal: parseFloat(updatedBillRecord.subtotal),
+      cgst: parseFloat(updatedBillRecord.cgst),
+      sgst: parseFloat(updatedBillRecord.sgst),
+      total: parseFloat(updatedBillRecord.total),
+      paymentStatus: updatedBillRecord.payment_status,
+      customerId: updatedBillRecord.customer_id ? String(updatedBillRecord.customer_id) : null,
+      gstEnabled: (parseFloat(updatedBillRecord.cgst) > 0 || parseFloat(updatedBillRecord.sgst) > 0),
+      items: (insertedItems || []).map(item => ({
+        id: String(item.id),
+        productId: item.product_id ? String(item.product_id) : null,
+        name: item.name,
+        qty: parseFloat(item.quantity),
+        price: parseFloat(item.price),
+        amount: parseFloat(item.amount)
+      }))
+    };
+
+    return res.status(200).json({
+      success: true,
+      message: 'Invoice updated successfully',
+      bill: formattedBill
+    });
+
+  } catch (err) {
+    console.error('Update Bill Error:', err.message || err);
+    return res.status(500).json({ error: 'Server error updating invoice.' });
+  }
+};

@@ -6,6 +6,7 @@ const authenticateToken = require('../middleware/auth');
 router.post('/create', authenticateToken, billController.createBill);
 router.get('/recent', authenticateToken, billController.getRecentBills);
 router.get('/:id', authenticateToken, billController.getBillById);
+router.put('/:id', authenticateToken, billController.updateBill);
 router.delete('/:id', authenticateToken, billController.deleteBill);
 
 module.exports = router;

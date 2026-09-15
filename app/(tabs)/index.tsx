@@ -294,14 +294,28 @@ export default function DashboardScreen() {
                 </View>
               </TouchableOpacity>
               
-              <View style={styles.billDeleteDivider} />
-              
-              <TouchableOpacity
-                style={styles.billDeleteBtn}
-                onPress={() => handleDeleteBill(item.id, item.invoiceNumber || item.id)}
-              >
-                <Ionicons name="trash-outline" size={20} color="#FF4B4B" />
-              </TouchableOpacity>
+              <View style={styles.billActionsRow}>
+                <TouchableOpacity
+                  style={styles.billActionBtn}
+                  onPress={() =>
+                    router.push({
+                      pathname: '/(tabs)/create-bill',
+                      params: { editBillId: String(item.id) },
+                    })
+                  }
+                >
+                  <Ionicons name="create-outline" size={19} color="#D4AF37" />
+                </TouchableOpacity>
+
+                <View style={styles.billActionDivider} />
+
+                <TouchableOpacity
+                  style={styles.billActionBtn}
+                  onPress={() => handleDeleteBill(item.id, item.invoiceNumber || item.id)}
+                >
+                  <Ionicons name="trash-outline" size={19} color="#FF4B4B" />
+                </TouchableOpacity>
+              </View>
             </View>
           ))
         )}
@@ -798,14 +812,19 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
   },
-  billDeleteDivider: {
-    width: 1,
-    height: 24,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    marginHorizontal: 12,
+  billActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: 8,
   },
-  billDeleteBtn: {
-    padding: 8,
+  billActionDivider: {
+    width: 1,
+    height: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    marginHorizontal: 4,
+  },
+  billActionBtn: {
+    padding: 6,
     alignItems: 'center',
     justifyContent: 'center',
   },

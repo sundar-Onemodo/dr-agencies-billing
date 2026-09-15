@@ -475,9 +475,24 @@ Thank you for doing business!
         <Text style={styles.navbarTitle}>
           {isDraft === 'true' ? 'Draft Receipt' : 'Invoice Details'}
         </Text>
-        <TouchableOpacity style={styles.navShareBtn} onPress={handleShareInvoice}>
-          <Ionicons name="share-social-outline" size={22} color="#D4AF37" />
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          {bill?.id && (
+            <TouchableOpacity
+              style={styles.navEditBtn}
+              onPress={() =>
+                router.push({
+                  pathname: '/(tabs)/create-bill',
+                  params: { editBillId: String(bill.id) },
+                })
+              }
+            >
+              <Ionicons name="create-outline" size={22} color="#D4AF37" />
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity style={styles.navShareBtn} onPress={handleShareInvoice}>
+            <Ionicons name="share-social-outline" size={22} color="#D4AF37" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -826,6 +841,20 @@ Thank you for doing business!
             onPress={handlePrintInvoice}
             style={styles.primaryBtn}
           />
+          {bill?.id && (
+            <GoldButton
+              title="Edit Invoice"
+              variant="outlined"
+              iconName="create-outline"
+              onPress={() =>
+                router.push({
+                  pathname: '/(tabs)/create-bill',
+                  params: { editBillId: String(bill.id) },
+                })
+              }
+              style={styles.secondaryBtn}
+            />
+          )}
           <GoldButton
             title="Share Digitally (Text/WhatsApp)"
             variant="outlined"
@@ -860,6 +889,10 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '700',
+  },
+  navEditBtn: {
+    padding: 8,
+    marginRight: 4,
   },
   navShareBtn: {
     padding: 8,

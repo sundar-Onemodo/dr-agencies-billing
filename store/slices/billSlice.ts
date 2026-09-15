@@ -114,6 +114,28 @@ export const fetchBillDetails = createAsyncThunk(
   }
 );
 
+export const updateBill = createAsyncThunk(
+  'bills/updateBill',
+  async ({ id, billData }: { id: string; billData: Partial<Bill> }, { getState, rejectWithValue }) => {
+    try {
+      const headers = getAuthHeaders(getState() as RootState);
+      const response = await fetch(`${API_URL}/bills/${id}`, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify(billData)
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        return rejectWithValue(data.error || 'Failed to update bill');
+      }
+      return data.bill as Bill;
+    } catch (err: any) {
+      return rejectWithValue(err.message || 'Server connection failed');
+    }
+  }
+);
+
 export const deleteBill = createAsyncThunk(
   'bills/deleteBill',
   async (billId: string, { getState, rejectWithValue }) => {
@@ -185,6 +207,25 @@ const billSlice = createSlice({
         state.currentBill = action.payload;
       })
       .addCase(fetchBillDetails.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload as string;
+      })
+      // Update Bill
+      .addCase(updateBill.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(updateBill.fulfilled, (state, action) => {
+        state.loading = false;
+        const index = state.items.findIndex((b) => b.id === action.payload.id);
+        if (index !== -1) {
+          state.items[index] = action.payload;
+        }
+        if (state.currentBill && state.currentBill.id === action.payload.id) {
+          state.currentBill = action.payload;
+        }
+      })
+      .addCase(updateBill.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload as string;
       })

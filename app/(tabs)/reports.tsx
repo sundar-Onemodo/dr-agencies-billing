@@ -300,14 +300,28 @@ export default function ReportsScreen() {
                 </View>
               </TouchableOpacity>
               
-              <View style={styles.deleteDivider} />
-              
-              <TouchableOpacity
-                style={styles.deleteBtn}
-                onPress={() => handleDeleteBill(item.id, item.invoiceNumber || item.id)}
-              >
-                <Ionicons name="trash-outline" size={18} color="#FF4B4B" />
-              </TouchableOpacity>
+              <View style={styles.actionsRow}>
+                <TouchableOpacity
+                  style={styles.actionBtn}
+                  onPress={() =>
+                    router.push({
+                      pathname: '/(tabs)/create-bill',
+                      params: { editBillId: String(item.id) },
+                    })
+                  }
+                >
+                  <Ionicons name="create-outline" size={18} color="#D4AF37" />
+                </TouchableOpacity>
+
+                <View style={styles.actionDivider} />
+
+                <TouchableOpacity
+                  style={styles.actionBtn}
+                  onPress={() => handleDeleteBill(item.id, item.invoiceNumber || item.id)}
+                >
+                  <Ionicons name="trash-outline" size={18} color="#FF4B4B" />
+                </TouchableOpacity>
+              </View>
             </View>
           ))
         )}
@@ -489,14 +503,19 @@ const styles = StyleSheet.create({
     fontSize: 10,
     marginTop: 2,
   },
-  deleteDivider: {
-    width: 1,
-    height: 24,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    marginHorizontal: 12,
+  actionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: 6,
   },
-  deleteBtn: {
-    padding: 8,
+  actionDivider: {
+    width: 1,
+    height: 18,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    marginHorizontal: 4,
+  },
+  actionBtn: {
+    padding: 6,
     alignItems: 'center',
     justifyContent: 'center',
   },

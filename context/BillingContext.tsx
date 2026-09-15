@@ -14,6 +14,7 @@ import { API_URL } from '../constants/Api';
 import { 
   fetchRecentBills, 
   createBill as createBillThunk,
+  updateBill as updateBillThunk,
   deleteBill as deleteBillThunk
 } from '../store/slices/billSlice';
 import { 
@@ -95,6 +96,7 @@ interface BillingContextType {
   deleteProduct: (id: string) => void;
   bills: Bill[];
   addBill: (bill: Omit<Bill, 'id'>) => Promise<string>; // returns generated invoice ID
+  updateBill: (id: string, updatedBill: Partial<Bill>) => Promise<void>;
   deleteBill: (id: string) => Promise<void>;
   companySettings: CompanySettings;
   updateCompanySettings: (settings: CompanySettings) => Promise<void>;
@@ -247,6 +249,17 @@ export const BillingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return nextInvoiceId;
   };
 
+  const updateBill = async (id: string, updatedBill: Partial<Bill>): Promise<void> => {
+    const resultAction = await dispatch(updateBillThunk({ id, billData: updatedBill }));
+    if (updateBillThunk.rejected.match(resultAction)) {
+      throw new Error(resultAction.payload as string || 'Failed to update bill');
+    }
+    // Automatically refresh products, customers, and recent bills
+    dispatch(fetchProducts());
+    dispatch(fetchCustomers());
+    dispatch(fetchRecentBills());
+  };
+
   const deleteBill = async (id: string): Promise<void> => {
     const resultAction = await dispatch(deleteBillThunk(id));
     if (deleteBillThunk.rejected.match(resultAction)) {
@@ -368,6 +381,7 @@ export const BillingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         deleteProduct,
         bills,
         addBill,
+        updateBill,
         deleteBill,
         companySettings,
         updateCompanySettings,
