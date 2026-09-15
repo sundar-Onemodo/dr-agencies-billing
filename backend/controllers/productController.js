@@ -219,7 +219,9 @@ exports.updateProduct = async (req, res) => {
  * GET /products/stock-ledger
  */
 exports.getStockLedger = async (req, res) => {
-  const { from, to } = req.query;
+  const { from, to, productId, product_id } = req.query;
+  const targetProductId = productId || product_id;
+
   try {
     let query = supabase
       .from('product_stock_logs')
@@ -236,6 +238,15 @@ exports.getStockLedger = async (req, res) => {
       `)
       .eq('user_id', req.user.id);
 
+    if (targetProductId && targetProductId !== 'undefined' && targetProductId !== 'null') {
+      const parsedId = parseInt(targetProductId, 10);
+      if (!isNaN(parsedId)) {
+        query = query.eq('product_id', parsedId);
+      } else {
+        query = query.eq('product_id', targetProductId);
+      }
+    }
+
     if (from && to) {
       const fromDate = new Date(`${from}T00:00:00.000Z`).toISOString();
       const toDate = new Date(`${to}T23:59:59.999Z`).toISOString();
@@ -250,7 +261,7 @@ exports.getStockLedger = async (req, res) => {
       return res.status(400).json({ error: error.message });
     }
 
-    const formattedLogs = data.map(log => ({
+    const formattedLogs = (data || []).map(log => ({
       id: String(log.id),
       productId: String(log.product_id),
       productName: log.products ? log.products.name : 'Unknown Product',
@@ -267,5 +278,75 @@ exports.getStockLedger = async (req, res) => {
   } catch (err) {
     console.error('Get Stock Ledger Error:', err.message || err);
     return res.status(500).json({ error: 'Server error retrieving stock ledger.' });
+  }
+};
+
+/**
+ * Add incoming stock to product
+ * POST /products/:id/add-stock
+ */
+exports.addStock = async (req, res) => {
+  const { id } = req.params;
+  const { quantity, referenceId } = req.body;
+
+  const addQty = parseFloat(quantity);
+  if (isNaN(addQty) || addQty <= 0) {
+    return res.status(400).json({ error: 'Please provide a valid positive quantity to add.' });
+  }
+
+  try {
+    const { data: product, error: fetchErr } = await supabase
+      .from('products')
+      .select('*')
+      .eq('id', id)
+      .eq('user_id', req.user.id)
+      .single();
+
+    if (fetchErr || !product) {
+      return res.status(404).json({ error: 'Product not found.' });
+    }
+
+    const currentStock = parseFloat(product.stock_qty || 0);
+    const newStock = currentStock + addQty;
+
+    const { data: updatedProd, error: updateErr } = await supabase
+      .from('products')
+      .update({ stock_qty: newStock })
+      .eq('id', id)
+      .eq('user_id', req.user.id)
+      .select()
+      .single();
+
+    if (updateErr) {
+      return res.status(400).json({ error: updateErr.message });
+    }
+
+    try {
+      await supabase.from('product_stock_logs').insert({
+        user_id: req.user.id,
+        product_id: parseInt(id, 10),
+        type: 'IN',
+        quantity: addQty,
+        reference_id: referenceId || 'RESTOCK'
+      });
+    } catch (logErr) {
+      console.error('Error logging add stock:', logErr);
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: `Successfully added ${addQty} kg to ${updatedProd.name}`,
+      product: {
+        id: String(updatedProd.id),
+        name: updatedProd.name,
+        price: parseFloat(updatedProd.price),
+        gstRate: parseFloat(updatedProd.gst_rate),
+        stockQty: parseFloat(updatedProd.stock_qty || 0),
+        createdAt: updatedProd.created_at
+      }
+    });
+  } catch (err) {
+    console.error('Add Stock Error:', err.message || err);
+    return res.status(500).json({ error: 'Server error updating stock.' });
   }
 };

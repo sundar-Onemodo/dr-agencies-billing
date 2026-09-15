@@ -132,13 +132,17 @@ export interface StockLog {
 
 export const fetchStockLedger = createAsyncThunk(
   'products/fetchStockLedger',
-  async (range: { from?: string; to?: string } | undefined, { getState, rejectWithValue }) => {
+  async (params: { from?: string; to?: string; productId?: string } | undefined, { getState, rejectWithValue }) => {
     try {
       const headers = getAuthHeaders(getState() as RootState);
-      let queryStr = '';
-      if (range?.from && range?.to) {
-        queryStr = `?from=${range.from}&to=${range.to}`;
+      const queryParams: string[] = [];
+      if (params?.from && params?.to) {
+        queryParams.push(`from=${params.from}&to=${params.to}`);
       }
+      if (params?.productId) {
+        queryParams.push(`productId=${params.productId}`);
+      }
+      const queryStr = queryParams.length > 0 ? `?${queryParams.join('&')}` : '';
       const response = await fetch(`${API_URL}/products/stock-ledger${queryStr}`, { headers });
       const data = await response.json();
 
@@ -146,6 +150,28 @@ export const fetchStockLedger = createAsyncThunk(
         return rejectWithValue(data.error || 'Failed to fetch stock logs');
       }
       return data.logs as StockLog[];
+    } catch (err: any) {
+      return rejectWithValue(err.message || 'Server connection failed');
+    }
+  }
+);
+
+export const addStockQty = createAsyncThunk(
+  'products/addStockQty',
+  async ({ productId, quantity, referenceId }: { productId: string; quantity: number; referenceId?: string }, { getState, rejectWithValue }) => {
+    try {
+      const headers = getAuthHeaders(getState() as RootState);
+      const response = await fetch(`${API_URL}/products/${productId}/add-stock`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ quantity, referenceId: referenceId || 'RESTOCK' })
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        return rejectWithValue(data.error || 'Failed to add stock quantity');
+      }
+      return data.product as Product;
     } catch (err: any) {
       return rejectWithValue(err.message || 'Server connection failed');
     }
@@ -216,6 +242,10 @@ const productSlice = createSlice({
       .addCase(updateProduct.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload as string;
+      })
+      // Add Stock Qty
+      .addCase(addStockQty.fulfilled, (state, action) => {
+        state.items = state.items.map(item => item.id === action.payload.id ? action.payload : item);
       });
   }
 });

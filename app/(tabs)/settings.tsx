@@ -13,6 +13,7 @@ import {
 import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useBilling } from '@/context/BillingContext';
+import { useAlert } from '@/context/AlertContext';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { GoldButton } from '@/components/ui/GoldButton';
 import { InputField } from '@/components/ui/InputField';
@@ -27,6 +28,7 @@ export default function SettingsScreen() {
     logout,
     refreshData,
   } = useBilling();
+  const { showSuccess, showWarning, showError, showConfirm } = useAlert();
 
   const [refreshing, setRefreshing] = useState(false);
 
@@ -73,7 +75,7 @@ export default function SettingsScreen() {
   // Save Store Details
   const handleSaveSettings = async () => {
     if (!name.trim() || !gstin.trim() || !address.trim()) {
-      Alert.alert('Validation Error', 'Company Name, GSTIN, and Address are required.');
+      showWarning('Validation Error', 'Company Name, GSTIN, and Address are required.');
       return;
     }
 
@@ -89,24 +91,25 @@ export default function SettingsScreen() {
         accountNo,
         ifsc,
       });
-      Alert.alert('Settings Saved', 'Business credentials updated successfully!');
+      showSuccess('Settings Saved', 'Business credentials updated successfully!', undefined, 'business');
     } catch (err: any) {
-      Alert.alert('Save Error', err.message || 'Failed to save store profile.');
+      showError('Save Error', err.message || 'Failed to save store profile.');
     }
   };
 
   const handleLogout = () => {
-    Alert.alert('Confirm Logout', 'Are you sure you want to log out of the billing portal?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Logout',
-        style: 'destructive',
-        onPress: () => {
-          logout();
-          router.replace('/login');
-        },
+    showConfirm(
+      'Confirm Logout',
+      'Are you sure you want to log out of the billing portal?',
+      () => {
+        logout();
+        router.replace('/login');
       },
-    ]);
+      undefined,
+      'Logout',
+      'Cancel',
+      true
+    );
   };
 
   return (

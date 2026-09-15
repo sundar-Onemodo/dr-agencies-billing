@@ -1,12 +1,12 @@
 import { GoldButton } from '@/components/ui/GoldButton';
 import { Bill, useBilling } from '@/context/BillingContext';
+import { useAlert } from '@/context/AlertContext';
 import { parseCustomerInfo } from '@/utils/customer';
 import { printA4Invoice } from '@/utils/printA4';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
-  Alert,
   Platform,
   SafeAreaView,
   ScrollView,
@@ -122,6 +122,7 @@ export default function BillPreviewScreen() {
   }>();
   
   const { bills, companySettings, printerSettings } = useBilling();
+  const { showSuccess, showWarning, showError, showConfirm, showAlert } = useAlert();
   const [bill, setBill] = useState<Bill | null>(null);
 
   const isA4 = printerSettings.paperSize === 'A4';
@@ -166,7 +167,7 @@ export default function BillPreviewScreen() {
         const parsed = JSON.parse(billData) as Bill;
         setBill(parsed);
       } catch (e) {
-        Alert.alert('Error', 'Failed to load preview data');
+        showError('Load Error', 'Failed to load invoice preview data');
       }
     }
   }, [billId, billData, bills]);
@@ -244,7 +245,7 @@ Thank you for doing business!
         title: `Invoice ${bill.invoiceNumber || bill.id}`,
       });
     } catch (error) {
-      Alert.alert('Error', 'Could not share invoice');
+      showError('Error', 'Could not share invoice');
     }
   };
 
@@ -254,7 +255,7 @@ Thank you for doing business!
       try {
         await printA4Invoice(bill!, companySettings);
       } catch (error) {
-        Alert.alert('Printing Error', 'Could not open print sheet.');
+        showError('Printing Error', 'Could not open print sheet.');
       }
       return;
     }
@@ -263,13 +264,13 @@ Thank you for doing business!
     const printerAddress = printerSettings.connectedPrinterAddress;
     
     if (!printerName) {
-      Alert.alert(
+      showConfirm(
         'Setup Printer',
         'No hardware printer connected. Would you like to set one up in Settings?',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Settings', onPress: () => router.push('/(tabs)/settings') },
-        ]
+        () => router.push('/(tabs)/settings'),
+        undefined,
+        'Settings',
+        'Cancel'
       );
       return;
     }
@@ -277,11 +278,12 @@ Thank you for doing business!
     // Checking if running in native app with real bluetooth connection
     if (!BluetoothEscposPrinter || !printerAddress || printerAddress.startsWith('pr-')) {
       // Fallback/Simulation mode
-      Alert.alert(
-        'Print Success (Simulated)',
-        `Sending invoice data to connected printer "${printerName}" (${printerSettings.paperSize} width)...`,
-        [{ text: 'Dismiss' }]
-      );
+      showAlert({
+        title: 'Print Success (Simulated)',
+        message: `Sending invoice data to connected printer "${printerName}" (${printerSettings.paperSize} width)...`,
+        type: 'info',
+        iconName: 'print-outline',
+      });
       return;
     }
 
@@ -419,7 +421,7 @@ Thank you for doing business!
       
     } catch (error) {
       console.warn('Real printer error:', error);
-      Alert.alert('Printing Error', 'Could not print to the device. Please verify your Bluetooth connection and try again.');
+      showError('Printing Error', 'Could not print to the device. Please verify your Bluetooth connection and try again.');
     }
   };
 
@@ -672,6 +674,7 @@ Thank you for doing business!
                   <View style={styles.a4FooterTermsBox}>
                     <Text style={styles.a4FooterBoxTitle}>Terms & Conditions:</Text>
                     <Text style={styles.a4TermsText}>Goods once sold will not be taken back or exchanged.</Text>
+                  </View>
 
                   {/* Signatory */}
                   <View style={styles.a4FooterSignatoryBox}>

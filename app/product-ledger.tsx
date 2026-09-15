@@ -14,6 +14,7 @@ import {
 import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useBilling } from '@/context/BillingContext';
+import { useAlert } from '@/context/AlertContext';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { DateRangePickerModal } from '@/components/ui/DateRangePickerModal';
 
@@ -32,6 +33,7 @@ interface StockLogItem {
 export default function ProductLedgerScreen() {
   const router = useRouter();
   const { fetchStockLedgerList } = useBilling();
+  const { showError } = useAlert();
 
   const [activeFilter, setActiveFilter] = useState<FilterType>('monthly');
   const [showCalendar, setShowCalendar] = useState(false);
@@ -80,7 +82,7 @@ export default function ProductLedgerScreen() {
       setLogs(ledgerLogs);
     } catch (err: any) {
       console.error('Error fetching stock ledger logs:', err);
-      Alert.alert('Error', 'Failed to retrieve stock ledger records.');
+      showError('Error', 'Failed to retrieve stock ledger records.');
     } finally {
       setLoading(false);
       setRefreshing(false);

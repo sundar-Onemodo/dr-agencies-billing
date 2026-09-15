@@ -12,23 +12,31 @@ import {
   ActivityIndicator,
   RefreshControl,
 } from 'react-native';
+import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useBilling } from '@/context/BillingContext';
+import { useAlert } from '@/context/AlertContext';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { InputField } from '@/components/ui/InputField';
 import { Customer } from '@/store/slices/customerSlice';
+import { downloadCustomerLedgerPdf } from '@/utils/printCustomerLedger';
 
 export default function PaymentsScreen() {
+  const router = useRouter();
   const { 
     customers, 
     fetchCustomersList, 
     recordCustomerPayment, 
     fetchCustomerPaymentsList,
-    customerPayments 
+    customerPayments,
+    companySettings,
+    addCustomer,
   } = useBilling();
+  const { showSuccess, showWarning, showError } = useAlert();
   
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
+  const [downloadingPdfId, setDownloadingPdfId] = useState<string | null>(null);
   
   // Payment recording state
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
@@ -39,9 +47,33 @@ export default function PaymentsScreen() {
   const [modalVisible, setModalVisible] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
+  // Add Customer modal state
+  const [addCustomerModalVisible, setAddCustomerModalVisible] = useState(false);
+  const [newCustName, setNewCustName] = useState('');
+  const [newCustPhone, setNewCustPhone] = useState('');
+  const [newCustAddress, setNewCustAddress] = useState('');
+  const [newCustGstin, setNewCustGstin] = useState('');
+  const [newCustState, setNewCustState] = useState('Tamil Nadu');
+  const [savingCustomer, setSavingCustomer] = useState(false);
+
   // Expanded History states
   const [expandedCustomerId, setExpandedCustomerId] = useState<string | null>(null);
   const [historyLoading, setHistoryLoading] = useState<string | null>(null);
+
+  const handleDownloadPdf = async (customer: Customer) => {
+    try {
+      setDownloadingPdfId(customer.id);
+      let txList = customerPayments[customer.id];
+      if (!txList || txList.length === 0) {
+        txList = await fetchCustomerPaymentsList(customer.id);
+      }
+      await downloadCustomerLedgerPdf(customer, txList || [], companySettings);
+    } catch (err: any) {
+      showError('PDF Export Error', err.message || 'Could not export customer statement PDF.');
+    } finally {
+      setDownloadingPdfId(null);
+    }
+  };
 
   // Pull to refresh state
   const [refreshing, setRefreshing] = useState(false);
@@ -116,14 +148,14 @@ export default function PaymentsScreen() {
     const amount = parseFloat(paymentAmount);
 
     if (isNaN(amount) || amount <= 0) {
-      Alert.alert('Invalid Amount', 'Please enter a valid payment amount greater than 0.');
+      showWarning('Invalid Amount', 'Please enter a valid payment amount greater than 0.');
       return;
     }
 
     // Validate paymentDate format (DD-MM-YYYY)
     const dateRegex = /^\d{2}-\d{2}-\d{4}$/;
     if (paymentDate && !dateRegex.test(paymentDate)) {
-      Alert.alert('Invalid Date Format', 'Please enter date in DD-MM-YYYY format.');
+      showWarning('Invalid Date Format', 'Please enter date in DD-MM-YYYY format.');
       return;
     }
 
@@ -141,14 +173,16 @@ export default function PaymentsScreen() {
         console.error('Error updating history:', historyErr);
       }
 
-      Alert.alert(
+      showSuccess(
         'Payment Recorded',
-        `Successfully recorded payment of ${formatCurrency(amount)} via ${finalMode} for "${selectedCustomer.name}".`
+        `Successfully recorded payment of ${formatCurrency(amount)} via ${finalMode} for "${selectedCustomer.name}".`,
+        undefined,
+        'cash'
       );
       setModalVisible(false);
       setSelectedCustomer(null);
     } catch (err: any) {
-      Alert.alert('Error', err.message || 'Failed to record payment');
+      showError('Error', err.message || 'Failed to record payment');
     } finally {
       setSubmitting(false);
     }
@@ -170,10 +204,73 @@ export default function PaymentsScreen() {
     }
   };
 
+  const handleOpenAddCustomer = () => {
+    setNewCustName('');
+    setNewCustPhone('');
+    setNewCustAddress('');
+    setNewCustGstin('');
+    setNewCustState('Tamil Nadu');
+    setAddCustomerModalVisible(true);
+  };
+
+  const handleCreateCustomerSubmit = async () => {
+    const trimmedName = newCustName.trim();
+    if (!trimmedName) {
+      showWarning('Validation Error', 'Customer Name is required.');
+      return;
+    }
+
+    const trimmedPhone = newCustPhone.trim();
+    if (trimmedPhone && !/^\d{10}$/.test(trimmedPhone)) {
+      showWarning('Validation Error', 'Contact Number must be a valid 10-digit number.');
+      return;
+    }
+
+    // Duplicate check
+    const isNameDuplicate = customers.some(
+      (c) => c.name.trim().toLowerCase() === trimmedName.toLowerCase()
+    );
+    if (isNameDuplicate) {
+      showWarning('Duplicate Customer', `A customer named "${trimmedName}" already exists in your ledger.`);
+      return;
+    }
+
+    if (trimmedPhone) {
+      const isPhoneDuplicate = customers.some(
+        (c) => c.phone && c.phone.trim() === trimmedPhone
+      );
+      if (isPhoneDuplicate) {
+        showWarning('Duplicate Contact', `A customer with phone number "${trimmedPhone}" already exists.`);
+        return;
+      }
+    }
+
+    try {
+      setSavingCustomer(true);
+      await addCustomer({
+        name: trimmedName,
+        phone: trimmedPhone,
+        address: newCustAddress.trim(),
+        gstin: newCustGstin.trim().toUpperCase(),
+        state: newCustState.trim() || 'Tamil Nadu',
+      });
+      await fetchCustomersList();
+      showSuccess('Customer Added', `Customer "${trimmedName}" added to ledger directory successfully!`, undefined, 'person-add');
+      setAddCustomerModalVisible(false);
+      setSearchQuery(trimmedName);
+    } catch (err: any) {
+      showError('Error', err.message || 'Failed to add customer.');
+    } finally {
+      setSavingCustomer(false);
+    }
+  };
+
   // Filter customers by search
   const filteredCustomers = customers.filter(c =>
     c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    c.address.toLowerCase().includes(searchQuery.toLowerCase())
+    c.address.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (c.phone && c.phone.includes(searchQuery)) ||
+    (c.gstin && c.gstin.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
   // Totals calculations
@@ -194,8 +291,28 @@ export default function PaymentsScreen() {
     <SafeAreaView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.title}>Customer Ledger</Text>
-        <Text style={styles.subtitle}>Track pending payments and clear balances</Text>
+        <View style={{ flex: 1, paddingRight: 8 }}>
+          <Text style={styles.title}>Customer Ledger</Text>
+          <Text style={styles.subtitle}>Track pending payments, purchase history & statements</Text>
+        </View>
+        <View style={styles.headerBtnGroup}>
+          <TouchableOpacity
+            style={styles.addCustomerHeaderBtn}
+            onPress={handleOpenAddCustomer}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="person-add" size={14} color="#191820" style={{ marginRight: 4 }} />
+            <Text style={styles.addCustomerHeaderBtnText}>+ Add</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.directoryNavBtn}
+            onPress={() => router.push('/customers')}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="people" size={14} color="#D4AF37" style={{ marginRight: 4 }} />
+            <Text style={styles.directoryNavBtnText}>Directory</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Search Input */}
@@ -206,6 +323,8 @@ export default function PaymentsScreen() {
           value={searchQuery}
           onChangeText={setSearchQuery}
           iconName="search-outline"
+          showClearButton={true}
+          onClear={() => setSearchQuery('')}
           containerStyle={styles.searchInput}
         />
       </View>
@@ -253,6 +372,7 @@ export default function PaymentsScreen() {
             filteredCustomers.map((customer) => {
               const hasPending = customer.pendingAmount > 0;
               const isExpanded = expandedCustomerId === customer.id;
+              const isDownloading = downloadingPdfId === customer.id;
               
               return (
                 <GlassCard
@@ -332,7 +452,23 @@ export default function PaymentsScreen() {
                         style={{ marginRight: 4 }} 
                       />
                       <Text style={[styles.historyBtnText, isExpanded && styles.historyBtnTextActive]}>
-                        {isExpanded ? 'Hide History' : 'View History'}
+                        {isExpanded ? 'Hide' : 'History'}
+                      </Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      activeOpacity={0.8}
+                      style={styles.pdfStatementBtn}
+                      onPress={() => handleDownloadPdf(customer)}
+                      disabled={isDownloading}
+                    >
+                      {isDownloading ? (
+                        <ActivityIndicator size="small" color="#D4AF37" style={{ marginRight: 4 }} />
+                      ) : (
+                        <Ionicons name="document-text-outline" size={15} color="#D4AF37" style={{ marginRight: 4 }} />
+                      )}
+                      <Text style={styles.pdfStatementBtnText}>
+                        {isDownloading ? 'PDF...' : 'PDF Statement'}
                       </Text>
                     </TouchableOpacity>
 
@@ -342,7 +478,7 @@ export default function PaymentsScreen() {
                       onPress={() => openPaymentModal(customer)}
                     >
                       <Ionicons name="cash-outline" size={15} color="#191820" style={{ marginRight: 6 }} />
-                      <Text style={styles.recordPaymentText}>Record Payment</Text>
+                      <Text style={styles.recordPaymentText}>Record Pay</Text>
                     </TouchableOpacity>
                   </View>
 
@@ -350,17 +486,27 @@ export default function PaymentsScreen() {
                   {isExpanded && (
                     <View style={styles.historyContainer}>
                       <View style={styles.historyDivider} />
-                      <Text style={styles.historyTitle}>Payment Ledger Logs</Text>
+                      <View style={styles.historyHeaderRow}>
+                        <Text style={styles.historyTitle}>Purchase & Payment History</Text>
+                        <TouchableOpacity
+                          style={styles.historyExportBtn}
+                          onPress={() => handleDownloadPdf(customer)}
+                          disabled={isDownloading}
+                        >
+                          <Ionicons name="download-outline" size={12} color="#D4AF37" style={{ marginRight: 3 }} />
+                          <Text style={styles.historyExportBtnText}>Download PDF</Text>
+                        </TouchableOpacity>
+                      </View>
                       
                       {historyLoading === customer.id ? (
                         <View style={styles.historyLoadingBox}>
                           <ActivityIndicator size="small" color="#D4AF37" />
-                          <Text style={styles.historyLoadingText}>Fetching payments...</Text>
+                          <Text style={styles.historyLoadingText}>Fetching transactions...</Text>
                         </View>
                       ) : (
                         <View style={styles.historyList}>
                           {!customerPayments[customer.id] || customerPayments[customer.id].length === 0 ? (
-                            <Text style={styles.noHistoryText}>No transactions recorded in history.</Text>
+                            <Text style={styles.noHistoryText}>No purchase or payment history recorded.</Text>
                           ) : (
                             customerPayments[customer.id].map((item) => {
                               let formattedDate = '';
@@ -544,6 +690,97 @@ export default function PaymentsScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Add Customer Modal */}
+      <Modal
+        visible={addCustomerModalVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setAddCustomerModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <View>
+                <Text style={styles.modalTitle}>Add New Customer</Text>
+                <Text style={styles.modalSubtitle}>Save to ledger directory & bills</Text>
+              </View>
+              <TouchableOpacity onPress={() => setAddCustomerModalVisible(false)} style={styles.closeBtn}>
+                <Ionicons name="close" size={24} color="#A0A0B0" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView contentContainerStyle={styles.addCustomerScroll} showsVerticalScrollIndicator={false}>
+              <InputField
+                label="Customer Name *"
+                placeholder="e.g. Surya Enterprises"
+                value={newCustName}
+                onChangeText={setNewCustName}
+                iconName="person-outline"
+              />
+
+              <InputField
+                label="Contact Number (10 digits)"
+                placeholder="e.g. 9876543210"
+                value={newCustPhone}
+                onChangeText={setNewCustPhone}
+                keyboardType="phone-pad"
+                maxLength={10}
+                iconName="call-outline"
+              />
+
+              <InputField
+                label="Address"
+                placeholder="e.g. 45/2 Main Bazaar, Madurai"
+                value={newCustAddress}
+                onChangeText={setNewCustAddress}
+                iconName="location-outline"
+              />
+
+              <InputField
+                label="GSTIN (Optional)"
+                placeholder="e.g. 33AAAAA0000A1Z5"
+                value={newCustGstin}
+                onChangeText={setNewCustGstin}
+                autoCapitalize="characters"
+                iconName="shield-checkmark-outline"
+              />
+
+              <InputField
+                label="State"
+                placeholder="e.g. Tamil Nadu"
+                value={newCustState}
+                onChangeText={setNewCustState}
+                iconName="map-outline"
+              />
+
+              <View style={styles.modalActions}>
+                <TouchableOpacity
+                  style={[styles.modalBtn, styles.modalCancelBtn]}
+                  onPress={() => setAddCustomerModalVisible(false)}
+                >
+                  <Text style={styles.modalCancelText}>Cancel</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.modalBtn, styles.modalSaveBtn, savingCustomer && { opacity: 0.6 }]}
+                  onPress={handleCreateCustomerSubmit}
+                  disabled={savingCustomer}
+                >
+                  {savingCustomer ? (
+                    <ActivityIndicator size="small" color="#191820" />
+                  ) : (
+                    <>
+                      <Ionicons name="person-add" size={16} color="#191820" style={{ marginRight: 6 }} />
+                      <Text style={styles.modalSaveText}>Save Customer</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -554,9 +791,48 @@ const styles = StyleSheet.create({
     backgroundColor: '#191820',
   },
   header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     paddingHorizontal: 16,
     paddingTop: Platform.OS === 'android' ? 40 : 16,
     paddingBottom: 8,
+  },
+  headerBtnGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  addCustomerHeaderBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#D4AF37',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 8,
+  },
+  addCustomerHeaderBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#191820',
+  },
+  directoryNavBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(212, 175, 55, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(212, 175, 55, 0.3)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  directoryNavBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#D4AF37',
+  },
+  addCustomerScroll: {
+    paddingBottom: 16,
   },
   title: {
     color: '#FFFFFF',
@@ -712,14 +988,15 @@ const styles = StyleSheet.create({
   cardActionRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    gap: 10,
+    gap: 8,
   },
   historyBtn: {
+    flex: 0.9,
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1.2,
     borderColor: '#D4AF37',
-    paddingHorizontal: 12,
+    paddingHorizontal: 8,
     paddingVertical: 8,
     borderRadius: 8,
     justifyContent: 'center',
@@ -735,12 +1012,29 @@ const styles = StyleSheet.create({
   historyBtnTextActive: {
     color: '#191820',
   },
+  pdfStatementBtn: {
+    flex: 1.3,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.2,
+    borderColor: '#D4AF37',
+    backgroundColor: 'rgba(212, 175, 55, 0.08)',
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  pdfStatementBtnText: {
+    color: '#D4AF37',
+    fontSize: 12,
+    fontWeight: '700',
+  },
   recordPaymentBtn: {
-    flex: 1,
+    flex: 1.1,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#D4AF37',
-    paddingHorizontal: 12,
+    paddingHorizontal: 8,
     paddingVertical: 8,
     borderRadius: 8,
     justifyContent: 'center',
@@ -760,13 +1054,32 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.06)',
     marginBottom: 12,
   },
-  historyTitle: {
-    color: '#A0A0B0',
-    fontSize: 12,
+  historyHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  historyExportBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 0.5,
+    borderColor: '#D4AF37',
+    backgroundColor: 'rgba(212, 175, 55, 0.1)',
+  },
+  historyExportBtnText: {
+    fontSize: 10,
     fontWeight: '700',
-    textTransform: 'uppercase',
+    color: '#D4AF37',
+  },
+  historyTitle: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
     letterSpacing: 0.5,
-    marginBottom: 10,
   },
   historyLoadingBox: {
     alignItems: 'center',
@@ -870,6 +1183,12 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '700',
+  },
+  modalSubtitle: {
+    color: '#A0A0B0',
+    fontSize: 11,
+    marginTop: 2,
+    fontWeight: '500',
   },
   closeBtn: {
     padding: 4,

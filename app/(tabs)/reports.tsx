@@ -7,7 +7,6 @@ import {
   TouchableOpacity,
   SafeAreaView,
   Platform,
-  Alert,
   ActivityIndicator,
   RefreshControl,
 } from 'react-native';
@@ -15,6 +14,7 @@ import { DateRangePickerModal } from '@/components/ui/DateRangePickerModal';
 import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useBilling, Bill } from '@/context/BillingContext';
+import { useAlert } from '@/context/AlertContext';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { parseCustomerInfo } from '@/utils/customer';
 
@@ -22,121 +22,82 @@ type FilterType = 'today' | 'weekly' | 'monthly' | 'custom';
 
 export default function ReportsScreen() {
   const router = useRouter();
-  const { bills, deleteBill, fetchBillsRange } = useBilling();
-  const [activeFilter, setActiveFilter] = useState<FilterType>('monthly'); // Default monthly to show mock data
+  const { deleteBill, fetchReportBillsRange } = useBilling();
+  const { showDelete, showSuccess, showError } = useAlert();
+  const [reportBills, setReportBills] = useState<Bill[]>([]);
+  const [activeFilter, setActiveFilter] = useState<FilterType>('monthly'); // Default monthly
   const [showCalendar, setShowCalendar] = useState(false);
   const [customRange, setCustomRange] = useState<{ start: Date; end: Date } | null>(null);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
-  const handleRefresh = async () => {
-    setRefreshing(true);
+  const formatDateForApi = (date: Date) => {
+    const yyyy = date.getFullYear();
+    const mm = String(date.getMonth() + 1).padStart(2, '0');
+    const dd = String(date.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  };
+
+  const loadData = async (filter: FilterType, range: { start: Date; end: Date } | null) => {
     try {
+      setLoading(true);
       const today = new Date();
       let fromStr = '';
       let toStr = '';
 
-      const formatDateForApi = (date: Date) => {
-        const yyyy = date.getFullYear();
-        const mm = String(date.getMonth() + 1).padStart(2, '0');
-        const dd = String(date.getDate()).padStart(2, '0');
-        return `${yyyy}-${mm}-${dd}`;
-      };
-
-      if (activeFilter === 'today') {
+      if (filter === 'today') {
         fromStr = formatDateForApi(today);
         toStr = fromStr;
-      } else if (activeFilter === 'weekly') {
+      } else if (filter === 'weekly') {
         const sevenDaysAgo = new Date(today);
         sevenDaysAgo.setDate(today.getDate() - 7);
         fromStr = formatDateForApi(sevenDaysAgo);
         toStr = formatDateForApi(today);
-      } else if (activeFilter === 'monthly') {
+      } else if (filter === 'monthly') {
         const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
         fromStr = formatDateForApi(firstDayOfMonth);
         toStr = formatDateForApi(today);
-      } else if (activeFilter === 'custom' && customRange) {
-        fromStr = formatDateForApi(customRange.start);
-        toStr = formatDateForApi(customRange.end);
+      } else if (filter === 'custom' && range) {
+        fromStr = formatDateForApi(range.start);
+        toStr = formatDateForApi(range.end);
       } else {
+        setLoading(false);
         return;
       }
 
-      await fetchBillsRange(fromStr, toStr);
-    } catch (e) {
-      console.warn('Reports refresh failed:', e);
+      const fetched = await fetchReportBillsRange(fromStr, toStr);
+      setReportBills(fetched || []);
+    } catch (err: any) {
+      console.error('Error fetching bills for reports:', err);
     } finally {
-      setRefreshing(false);
+      setLoading(false);
     }
   };
 
-  // Fetch bills from server when filter changes
+  // Fetch bills when activeFilter or customRange changes
   React.useEffect(() => {
-    const fetchFilteredData = async () => {
-      try {
-        setLoading(true);
-        const today = new Date();
-        let fromStr = '';
-        let toStr = '';
-
-        const formatDateForApi = (date: Date) => {
-          const yyyy = date.getFullYear();
-          const mm = String(date.getMonth() + 1).padStart(2, '0');
-          const dd = String(date.getDate()).padStart(2, '0');
-          return `${yyyy}-${mm}-${dd}`;
-        };
-
-        if (activeFilter === 'today') {
-          fromStr = formatDateForApi(today);
-          toStr = fromStr;
-        } else if (activeFilter === 'weekly') {
-          const sevenDaysAgo = new Date(today);
-          sevenDaysAgo.setDate(today.getDate() - 7);
-          fromStr = formatDateForApi(sevenDaysAgo);
-          toStr = formatDateForApi(today);
-        } else if (activeFilter === 'monthly') {
-          const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-          fromStr = formatDateForApi(firstDayOfMonth);
-          toStr = formatDateForApi(today);
-        } else if (activeFilter === 'custom' && customRange) {
-          fromStr = formatDateForApi(customRange.start);
-          toStr = formatDateForApi(customRange.end);
-        } else {
-          setLoading(false);
-          return;
-        }
-
-        await fetchBillsRange(fromStr, toStr);
-      } catch (err: any) {
-        console.error('Error fetching bills for reports:', err);
-        Alert.alert('Error', 'Failed to load report data from server');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchFilteredData();
+    loadData(activeFilter, customRange);
   }, [activeFilter, customRange]);
 
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await loadData(activeFilter, customRange);
+    setRefreshing(false);
+  };
+
   const handleDeleteBill = (id: string, invoiceNo: string) => {
-    Alert.alert(
+    showDelete(
       'Delete Invoice',
       `Are you sure you want to delete invoice "${invoiceNo}"? This will restore product stock levels.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Delete', 
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await deleteBill(id);
-              Alert.alert('Success', 'Invoice deleted successfully');
-            } catch (err: any) {
-              Alert.alert('Error', err.message || 'Failed to delete invoice');
-            }
-          }
+      async () => {
+        try {
+          await deleteBill(id);
+          setReportBills(prev => prev.filter(b => b.id !== id));
+          showSuccess('Invoice Deleted', `Invoice "${invoiceNo}" was removed and stock has been restored.`);
+        } catch (err: any) {
+          showError('Delete Failed', err.message || 'Failed to delete invoice');
         }
-      ]
+      }
     );
   };
 
@@ -165,12 +126,7 @@ export default function ReportsScreen() {
     return `${dd}-${mm}-${yyyy}`;
   };
 
-  // Filter bills dynamically
-  const getFilteredBills = (): Bill[] => {
-    return bills;
-  };
-
-  const filteredBills = getFilteredBills();
+  const filteredBills = reportBills;
 
   // Dynamic calculations
   const totalSales = filteredBills.reduce((sum, b) => sum + b.total, 0);
@@ -300,7 +256,23 @@ export default function ReportsScreen() {
         ) : filteredBills.length === 0 ? (
           <GlassCard style={styles.emptyCard}>
             <Ionicons name="receipt-outline" size={40} color="#A0A0B0" style={{ marginBottom: 12 }} />
-            <Text style={styles.emptyText}>No transactions recorded in this period</Text>
+            <Text style={styles.emptyText}>No transactions recorded for this period</Text>
+            <View style={styles.emptyActionsRow}>
+              <TouchableOpacity
+                style={styles.emptyActionBtn}
+                onPress={() => setActiveFilter('monthly')}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.emptyActionBtnText}>View This Month</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.emptyActionBtn, styles.emptyActionBtnAlt]}
+                onPress={() => setActiveFilter('weekly')}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.emptyActionBtnText, styles.emptyActionBtnTextAlt]}>View Last 7 Days</Text>
+              </TouchableOpacity>
+            </View>
           </GlassCard>
         ) : (
           filteredBills.map((item) => (
@@ -565,5 +537,29 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     marginTop: 12,
+  },
+  emptyActionsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 14,
+  },
+  emptyActionBtn: {
+    backgroundColor: '#D4AF37',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  emptyActionBtnText: {
+    color: '#191820',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  emptyActionBtnAlt: {
+    backgroundColor: 'rgba(212, 175, 55, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(212, 175, 55, 0.3)',
+  },
+  emptyActionBtnTextAlt: {
+    color: '#D4AF37',
   },
 });

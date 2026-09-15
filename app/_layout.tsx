@@ -8,6 +8,7 @@ import * as SplashScreen from 'expo-splash-screen';
 
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { BillingProvider } from '@/context/BillingContext';
+import { AlertProvider } from '@/context/AlertContext';
 
 import { Provider as ReduxProvider } from 'react-redux';
 import { store } from '@/store';
@@ -45,16 +46,19 @@ export default function RootLayout() {
   return (
     <ReduxProvider store={store}>
       <BillingProvider>
-        <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-          <Stack screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="index" />
-            <Stack.Screen name="login" />
-            <Stack.Screen name="(tabs)" />
-            <Stack.Screen name="preview" />
-            <Stack.Screen name="+not-found" options={{ headerShown: true, title: 'Not Found' }} />
-          </Stack>
-          <StatusBar style="light" backgroundColor="#191820" />
-        </ThemeProvider>
+        <AlertProvider>
+          <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+            <Stack screenOptions={{ headerShown: false }}>
+              <Stack.Screen name="index" />
+              <Stack.Screen name="login" />
+              <Stack.Screen name="(tabs)" />
+              <Stack.Screen name="preview" />
+              <Stack.Screen name="customers" />
+              <Stack.Screen name="+not-found" options={{ headerShown: true, title: 'Not Found' }} />
+            </Stack>
+            <StatusBar style="light" backgroundColor="#191820" />
+          </ThemeProvider>
+        </AlertProvider>
       </BillingProvider>
     </ReduxProvider>
   );

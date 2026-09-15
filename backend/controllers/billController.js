@@ -72,12 +72,18 @@ exports.createBill = async (req, res) => {
     let address = '';
     let gstin = '';
     let state = 'Tamil Nadu';
+    let phone = '';
     if (finalCustomerName.includes('||')) {
       const parts = finalCustomerName.split('||');
       name = parts[0] || '';
       address = parts[1] || '';
       gstin = parts[2] || '';
       state = parts[3] || 'Tamil Nadu';
+      phone = parts[4] || '';
+      if (!phone && address) {
+        const phoneMatch = address.match(/\b\d{10}\b/);
+        if (phoneMatch) phone = phoneMatch[0];
+      }
     }
 
     let customerId = null;
@@ -86,7 +92,7 @@ exports.createBill = async (req, res) => {
     try {
       const { data: existingCustomer, error: findError } = await supabase
         .from('customers')
-        .select('id')
+        .select('id, phone')
         .eq('user_id', req.user.id)
         .eq('name', name.trim())
         .maybeSingle();
@@ -99,9 +105,14 @@ exports.createBill = async (req, res) => {
         customerId = existingCustomer.id;
         
         // Update customer details if they changed
+        const updatePayload = { address, gstin, state, updated_at: new Date().toISOString() };
+        if (phone || !existingCustomer.phone) {
+          updatePayload.phone = phone || existingCustomer.phone || '';
+        }
+
         const { error: updateError } = await supabase
           .from('customers')
-          .update({ address, gstin, state, updated_at: new Date().toISOString() })
+          .update(updatePayload)
           .eq('id', customerId);
 
         if (updateError) {
@@ -114,6 +125,7 @@ exports.createBill = async (req, res) => {
           .insert({
             user_id: req.user.id,
             name: name.trim(),
+            phone: phone || '',
             address,
             gstin,
             state,

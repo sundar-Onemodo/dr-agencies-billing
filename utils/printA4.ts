@@ -2,7 +2,6 @@ import { Bill, CompanySettings } from '@/context/BillingContext';
 import * as FileSystem from 'expo-file-system';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
-import { Alert } from 'react-native';
 import { parseCustomerInfo } from './customer';
 
 /**
@@ -713,11 +712,10 @@ export const downloadA4InvoicePdf = async (bill: Bill, companySettings: CompanyS
         UTI: 'com.adobe.pdf',
       });
     } else {
-      Alert.alert('Error', 'Sharing/Saving is not available on this device');
+      throw new Error('Sharing/Saving is not available on this device');
     }
   } catch (error) {
     console.error('Error generating and sharing A4 PDF:', error);
-    Alert.alert('PDF Error', 'Failed to generate invoice PDF.');
     throw error;
   }
 };

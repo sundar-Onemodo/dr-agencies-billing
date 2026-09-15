@@ -69,6 +69,46 @@ export const fetchCustomers = createAsyncThunk(
   }
 );
 
+export const addCustomer = createAsyncThunk(
+  'customers/addCustomer',
+  async (
+    customerData: { name: string; phone?: string; address?: string; gstin?: string; state?: string; total_received?: number },
+    { getState, rejectWithValue }
+  ) => {
+    try {
+      const headers = getAuthHeaders(getState() as RootState);
+      const response = await fetch(`${API_URL}/customers`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(customerData)
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        return rejectWithValue(data.error || 'Failed to create customer');
+      }
+
+      const rawCustomer = data.customer;
+      const formattedCustomer: Customer = {
+        id: String(rawCustomer.id),
+        name: rawCustomer.name,
+        phone: rawCustomer.phone || '',
+        address: rawCustomer.address || '',
+        gstin: rawCustomer.gstin || '',
+        state: rawCustomer.state || 'Tamil Nadu',
+        totalBilled: parseFloat(rawCustomer.totalBilled || 0),
+        totalReceived: parseFloat(rawCustomer.totalReceived || 0),
+        pendingAmount: parseFloat(rawCustomer.pendingAmount || 0),
+        createdAt: rawCustomer.createdAt || new Date().toISOString()
+      };
+
+      return formattedCustomer;
+    } catch (err: any) {
+      return rejectWithValue(err.message || 'Server connection failed');
+    }
+  }
+);
+
 export const fetchCustomerPayments = createAsyncThunk(
   'customers/fetchCustomerPayments',
   async (customerId: string, { getState, rejectWithValue }) => {
@@ -81,6 +121,44 @@ export const fetchCustomerPayments = createAsyncThunk(
         return rejectWithValue(data.error || 'Failed to fetch customer payments');
       }
       return { customerId, payments: data.payments as CustomerPayment[] };
+    } catch (err: any) {
+      return rejectWithValue(err.message || 'Server connection failed');
+    }
+  }
+);
+
+export const updateCustomer = createAsyncThunk(
+  'customers/updateCustomer',
+  async (
+    customerData: { id: string; name?: string; phone?: string; address?: string; gstin?: string; state?: string },
+    { getState, rejectWithValue }
+  ) => {
+    try {
+      const headers = getAuthHeaders(getState() as RootState);
+      const response = await fetch(`${API_URL}/customers/${customerData.id}`, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify(customerData)
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        return rejectWithValue(data.error || 'Failed to update customer');
+      }
+
+      const rawCustomer = data.customer;
+      return {
+        id: String(rawCustomer.id),
+        name: rawCustomer.name,
+        phone: rawCustomer.phone || '',
+        address: rawCustomer.address || '',
+        gstin: rawCustomer.gstin || '',
+        state: rawCustomer.state || 'Tamil Nadu',
+        totalBilled: parseFloat(rawCustomer.totalBilled || 0),
+        totalReceived: parseFloat(rawCustomer.totalReceived || 0),
+        pendingAmount: parseFloat(rawCustomer.pendingAmount || 0),
+        createdAt: rawCustomer.createdAt || new Date().toISOString()
+      } as Customer;
     } catch (err: any) {
       return rejectWithValue(err.message || 'Server connection failed');
     }
@@ -136,6 +214,50 @@ const customerSlice = createSlice({
         state.items = action.payload;
       })
       .addCase(fetchCustomers.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload as string;
+      })
+      // Add Customer
+      .addCase(addCustomer.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(addCustomer.fulfilled, (state, action) => {
+        state.loading = false;
+        const existingIndex = state.items.findIndex(
+          c => c.id === action.payload.id || c.name.toLowerCase() === action.payload.name.toLowerCase()
+        );
+        if (existingIndex >= 0) {
+          state.items[existingIndex] = { ...state.items[existingIndex], ...action.payload };
+        } else {
+          state.items.push(action.payload);
+        }
+        state.items.sort((a, b) => a.name.localeCompare(b.name));
+      })
+      .addCase(addCustomer.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload as string;
+      })
+      // Update Customer
+      .addCase(updateCustomer.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(updateCustomer.fulfilled, (state, action) => {
+        state.loading = false;
+        const existingIndex = state.items.findIndex(c => c.id === action.payload.id);
+        if (existingIndex >= 0) {
+          state.items[existingIndex] = {
+            ...state.items[existingIndex],
+            ...action.payload,
+            totalBilled: state.items[existingIndex].totalBilled,
+            totalReceived: action.payload.totalReceived || state.items[existingIndex].totalReceived,
+            pendingAmount: Math.max(0, (state.items[existingIndex].totalBilled || 0) - (action.payload.totalReceived || state.items[existingIndex].totalReceived || 0)),
+          };
+        }
+        state.items.sort((a, b) => a.name.localeCompare(b.name));
+      })
+      .addCase(updateCustomer.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload as string;
       })

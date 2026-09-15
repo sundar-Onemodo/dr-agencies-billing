@@ -14,10 +14,13 @@ import {
   FlatList,
   Modal,
   RefreshControl,
+  ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useBilling, BillItem, Product } from '@/context/BillingContext';
+import { useAlert } from '@/context/AlertContext';
+import { Customer } from '@/store/slices/customerSlice';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { GoldButton } from '@/components/ui/GoldButton';
 import { InputField } from '@/components/ui/InputField';
@@ -52,7 +55,17 @@ const parseItemNameAndHsn = (name: string) => {
 
 export default function CreateBillScreen() {
   const router = useRouter();
-  const { products, addBill, generateNextInvoiceNumber, printerSettings, companySettings } = useBilling();
+  const {
+    products,
+    addBill,
+    generateNextInvoiceNumber,
+    printerSettings,
+    companySettings,
+    customers,
+    addCustomer,
+    refreshData,
+  } = useBilling();
+  const { showSuccess, showWarning, showError, showConfirm, showAlert } = useAlert();
 
   // Printer modal visibility state
   const [printerModalVisible, setPrinterModalVisible] = useState(false);
@@ -66,6 +79,10 @@ export default function CreateBillScreen() {
   const [customerState, setCustomerState] = useState('Tamil Nadu');
   const [billingDate, setBillingDate] = useState('');
   const [items, setItems] = useState<BillItem[]>([]);
+
+  // Customer Autocomplete & Quick Add States
+  const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
+  const [addingCustomerToDir, setAddingCustomerToDir] = useState(false);
   
   // Item Entry States
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
@@ -99,6 +116,65 @@ export default function CreateBillScreen() {
     }
   };
 
+  // Filter customers matching customerName input
+  const filteredCustomers = customerName.trim().length > 0
+    ? customers.filter((c) =>
+        c.name.toLowerCase().includes(customerName.toLowerCase()) ||
+        (c.phone && c.phone.includes(customerName))
+      )
+    : [];
+
+  const exactCustomerMatch = customers.find(
+    (c) => c.name.trim().toLowerCase() === customerName.trim().toLowerCase()
+  );
+  const isNewCustomer = customerName.trim().length > 0 && !exactCustomerMatch;
+
+  const handleSelectCustomer = (c: Customer) => {
+    setCustomerName(c.name);
+    setCustomerAddress(c.address || '');
+    setCustomerPhone(c.phone || '');
+    setCustomerGstin(c.gstin || '');
+    setCustomerState(c.state || 'Tamil Nadu');
+    setShowCustomerDropdown(false);
+  };
+
+  const handleQuickAddCustomer = async () => {
+    const trimmedName = customerName.trim();
+    if (!trimmedName) {
+      showWarning('Validation Error', 'Please enter customer name.');
+      return;
+    }
+
+    if (exactCustomerMatch) {
+      showWarning('Notice', `Customer "${trimmedName}" is already in your directory.`);
+      return;
+    }
+
+    if (customerPhone.trim()) {
+      const dupPhone = customers.find((c) => c.phone && c.phone.trim() === customerPhone.trim());
+      if (dupPhone) {
+        showWarning('Duplicate Contact', `Contact number "${customerPhone.trim()}" is already saved for "${dupPhone.name}".`);
+        return;
+      }
+    }
+
+    try {
+      setAddingCustomerToDir(true);
+      await addCustomer({
+        name: trimmedName,
+        phone: customerPhone.trim(),
+        address: customerAddress.trim(),
+        gstin: customerGstin.trim().toUpperCase(),
+        state: customerState.trim() || 'Tamil Nadu',
+      });
+      showSuccess('Customer Saved', `"${trimmedName}" has been added to your Customer Directory!`, undefined, 'person-add');
+    } catch (err: any) {
+      showError('Error', err.message || 'Failed to save customer');
+    } finally {
+      setAddingCustomerToDir(false);
+    }
+  };
+
   // Load Initial Info
   useEffect(() => {
     setInvoiceNo(generateNextInvoiceNumber());
@@ -125,18 +201,18 @@ export default function CreateBillScreen() {
 
   const handleAddItem = () => {
     if (!searchQuery.trim()) {
-      Alert.alert('Error', 'Please enter or select a product name');
+      showWarning('Select Product', 'Please enter or select a product name.');
       return;
     }
     const q = parseFloat(qty);
     const p = parseFloat(price);
 
     if (isNaN(q) || q <= 0) {
-      Alert.alert('Error', 'Please enter a valid quantity greater than 0');
+      showWarning('Invalid Quantity', 'Please enter a valid quantity greater than 0.');
       return;
     }
     if (isNaN(p) || p < 0) {
-      Alert.alert('Error', 'Please enter a valid price');
+      showWarning('Invalid Price', 'Please enter a valid price.');
       return;
     }
 
@@ -146,7 +222,7 @@ export default function CreateBillScreen() {
         .reduce((sum, item) => sum + item.qty, 0);
 
       if (existingQty + q > selectedProduct.stockQty) {
-        Alert.alert(
+        showWarning(
           'Insufficient Stock',
           `Cannot add item. Only ${selectedProduct.stockQty} kg are available in stock. You have already added ${existingQty} kg to this bill.`
         );
@@ -233,23 +309,20 @@ export default function CreateBillScreen() {
   // Save Bill
   const handleSaveBill = async () => {
     if (!customerName.trim()) {
-      Alert.alert('Validation Error', 'Please enter Customer Name');
+      showWarning('Validation Error', 'Please enter Customer Name.');
       return;
     }
     if (items.length === 0) {
-      Alert.alert('Validation Error', 'Please add at least one item to the invoice');
+      showWarning('Validation Error', 'Please add at least one item to the invoice.');
       return;
     }
-
-    const finalAddress = customerPhone.trim() 
-      ? `${customerAddress.trim()} ${customerPhone.trim()}` 
-      : customerAddress.trim();
 
     const finalBill = {
       invoiceNumber: invoiceNo,
       customerName: serializeCustomerInfo({
         name: customerName,
-        address: finalAddress,
+        address: customerAddress.trim(),
+        phone: customerPhone.trim(),
         gstin: customerGstin,
         state: customerState,
       }),
@@ -278,7 +351,7 @@ export default function CreateBillScreen() {
       // Show action choices modal
       setShowPostSaveModal(true);
     } catch (err: any) {
-      Alert.alert('Billing Error', err.message || 'Failed to save bill');
+      showError('Billing Error', err.message || 'Failed to save bill');
     } finally {
       setSaving(false);
     }
@@ -292,7 +365,7 @@ export default function CreateBillScreen() {
       try {
         await printA4Invoice(savedBillForActions, companySettings);
       } catch (error) {
-        Alert.alert('Printing Error', 'Could not open print sheet.');
+        showError('Printing Error', 'Could not open print sheet.');
       }
       return;
     }
@@ -300,23 +373,24 @@ export default function CreateBillScreen() {
     const printerName = printerSettings.connectedPrinter;
     const printerAddress = printerSettings.connectedPrinterAddress;
     if (!printerName) {
-      Alert.alert(
+      showConfirm(
         'Printer Disconnected',
         'No active printer found. Would you like to connect a thermal printer now?',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Connect Printer', onPress: () => setPrinterModalVisible(true) }
-        ]
+        () => setPrinterModalVisible(true),
+        undefined,
+        'Connect Printer',
+        'Cancel'
       );
       return;
     }
 
     if (!BluetoothEscposPrinter || !printerAddress || printerAddress.startsWith('pr-')) {
-      Alert.alert(
-        'Thermal Printer Active (Simulated)',
-        `Sending invoice ${savedBillForActions.invoiceNumber} to connected thermal printer "${printerName}" (${printerSettings.paperSize} width)...`,
-        [{ text: 'Dismiss' }]
-      );
+      showAlert({
+        title: 'Thermal Printer Active (Simulated)',
+        message: `Sending invoice ${savedBillForActions.invoiceNumber} to connected thermal printer "${printerName}" (${printerSettings.paperSize} width)...`,
+        type: 'info',
+        iconName: 'print-outline',
+      });
       return;
     }
 
@@ -442,10 +516,10 @@ export default function CreateBillScreen() {
       await BluetoothEscposPrinter.printText("* Thanks for doing business! *\n", {});
       await BluetoothEscposPrinter.printText("Goods once sold will not be returned.\n\n\n\n", {});
       
-      Alert.alert('Print Success', 'Invoice printed successfully!');
+      showSuccess('Print Success', 'Invoice printed successfully!', undefined, 'print');
     } catch (error) {
       console.warn('Real print failed:', error);
-      Alert.alert('Printing Error', 'Could not print to device. Please ensure it is powered on and connected.');
+      showError('Printing Error', 'Could not print to device. Please ensure it is powered on and connected.');
     }
   };
 
@@ -479,24 +553,21 @@ export default function CreateBillScreen() {
   // Preview Bill
   const handlePreview = () => {
     if (!customerName.trim()) {
-      Alert.alert('Validation Error', 'Please enter Customer Name to preview receipt');
+      showWarning('Validation Error', 'Please enter Customer Name to preview receipt.');
       return;
     }
     if (items.length === 0) {
-      Alert.alert('Validation Error', 'Please add at least one item to preview receipt');
+      showWarning('Validation Error', 'Please add at least one item to preview receipt.');
       return;
     }
-
-    const finalAddress = customerPhone.trim() 
-      ? `${customerAddress.trim()} ${customerPhone.trim()}` 
-      : customerAddress.trim();
 
     // Build temporary draft details to display in preview screen
     const draftBill = {
       id: invoiceNo,
       customerName: serializeCustomerInfo({
         name: customerName,
-        address: finalAddress,
+        address: customerAddress.trim(),
+        phone: customerPhone.trim(),
         gstin: customerGstin,
         state: customerState,
       }),
@@ -523,13 +594,9 @@ export default function CreateBillScreen() {
   // Print Bill
   const handlePrint = async () => {
     if (items.length === 0) {
-      Alert.alert('Validation Error', 'Cannot print an empty invoice');
+      showWarning('Validation Error', 'Cannot print an empty invoice.');
       return;
     }
-
-    const finalAddress = customerPhone.trim() 
-      ? `${customerAddress.trim()} ${customerPhone.trim()}` 
-      : customerAddress.trim();
 
     if (printerSettings.paperSize === 'A4') {
       try {
@@ -538,7 +605,8 @@ export default function CreateBillScreen() {
           invoiceNumber: invoiceNo,
           customerName: serializeCustomerInfo({
             name: customerName,
-            address: finalAddress,
+            address: customerAddress.trim(),
+            phone: customerPhone.trim(),
             gstin: customerGstin,
             state: customerState,
           }),
@@ -551,7 +619,7 @@ export default function CreateBillScreen() {
           total,
         }, companySettings);
       } catch (error) {
-        Alert.alert('Printing Error', 'Could not open print sheet.');
+        showError('Printing Error', 'Could not open print sheet.');
       }
       return;
     }
@@ -559,23 +627,24 @@ export default function CreateBillScreen() {
     const printerName = printerSettings.connectedPrinter;
     const printerAddress = printerSettings.connectedPrinterAddress;
     if (!printerName) {
-      Alert.alert(
+      showConfirm(
         'Printer Disconnected',
         'No active printer found. Would you like to connect a thermal printer now?',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Connect Printer', onPress: () => setPrinterModalVisible(true) }
-        ]
+        () => setPrinterModalVisible(true),
+        undefined,
+        'Connect Printer',
+        'Cancel'
       );
       return;
     }
 
     if (!BluetoothEscposPrinter || !printerAddress || printerAddress.startsWith('pr-')) {
-      Alert.alert(
-        'Thermal Printer Active (Simulated)',
-        `Sending invoice ${invoiceNo} to connected thermal printer "${printerName}" (${printerSettings.paperSize} width)...`,
-        [{ text: 'Dismiss' }]
-      );
+      showAlert({
+        title: 'Thermal Printer Active (Simulated)',
+        message: `Sending invoice ${invoiceNo} to connected thermal printer "${printerName}" (${printerSettings.paperSize} width)...`,
+        type: 'info',
+        iconName: 'print-outline',
+      });
       return;
     }
 
@@ -691,10 +760,10 @@ export default function CreateBillScreen() {
       await BluetoothEscposPrinter.printText("* Thanks for doing business! *\n", {});
       await BluetoothEscposPrinter.printText("Goods once sold will not be returned.\n\n\n\n", {});
       
-      Alert.alert('Print Success', 'Invoice printed successfully!');
+      showSuccess('Print Success', 'Invoice printed successfully!', undefined, 'print');
     } catch (error) {
       console.warn('Real print failed:', error);
-      Alert.alert('Printing Error', 'Could not print to device. Please ensure it is powered on and connected.');
+      showError('Printing Error', 'Could not print to device. Please ensure it is powered on and connected.');
     }
   };
 
@@ -737,13 +806,57 @@ export default function CreateBillScreen() {
 
           {/* Customer Input */}
           <GlassCard style={styles.inputCard}>
-            <InputField
-              label="Customer Name"
-              placeholder="Enter customer / business name"
-              value={customerName}
-              onChangeText={setCustomerName}
-              iconName="person"
-            />
+            <View style={styles.customerCardHeader}>
+              <Text style={styles.cardSectionTitle}>Customer Information</Text>
+              <TouchableOpacity
+                style={styles.manageCustLink}
+                onPress={() => router.push('/customers')}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="people-outline" size={14} color="#D4AF37" style={{ marginRight: 4 }} />
+                <Text style={styles.manageCustText}>Directory</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.customerInputContainer}>
+              <InputField
+                label="Customer Name *"
+                placeholder="Type customer name (e.g. Surya)"
+                value={customerName}
+                onChangeText={(text) => {
+                  setCustomerName(text);
+                  setShowCustomerDropdown(true);
+                }}
+                onFocus={() => setShowCustomerDropdown(true)}
+                iconName="person"
+                containerStyle={{ marginVertical: 0 }}
+              />
+
+              {/* Customer Autocomplete Dropdown */}
+              {showCustomerDropdown && filteredCustomers.length > 0 && (
+                <View style={styles.customerDropdownList}>
+                  {filteredCustomers.map((c) => (
+                    <TouchableOpacity
+                      key={c.id}
+                      style={styles.customerDropdownItem}
+                      onPress={() => handleSelectCustomer(c)}
+                    >
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.customerDropdownName}>{c.name}</Text>
+                        <Text style={styles.customerDropdownSub} numberOfLines={1}>
+                          {c.phone ? `📞 ${c.phone}` : ''} {c.address ? `• 📍 ${c.address}` : ''}
+                        </Text>
+                      </View>
+                      <View style={styles.autoFillBadge}>
+                        <Ionicons name="flash" size={11} color="#D4AF37" style={{ marginRight: 2 }} />
+                        <Text style={styles.autoFillText}>Select</Text>
+                      </View>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+            </View>
+
             <InputField
               label="Customer Address"
               placeholder="Enter customer address"
@@ -752,6 +865,7 @@ export default function CreateBillScreen() {
               iconName="location-outline"
               multiline
             />
+
             <InputField
               label="Customer Contact No"
               placeholder="Enter 10-digit phone number"
@@ -765,6 +879,7 @@ export default function CreateBillScreen() {
               keyboardType="phone-pad"
               iconName="call-outline"
             />
+
             <View style={styles.inputRow}>
               <View style={{ flex: 1, marginRight: 12 }}>
                 <InputField
@@ -786,6 +901,25 @@ export default function CreateBillScreen() {
                 />
               </View>
             </View>
+
+            {/* Quick Add Button if New Customer */}
+            {isNewCustomer && (
+              <TouchableOpacity
+                style={styles.quickAddCustomerBtn}
+                onPress={handleQuickAddCustomer}
+                disabled={addingCustomerToDir}
+                activeOpacity={0.8}
+              >
+                {addingCustomerToDir ? (
+                  <ActivityIndicator size="small" color="#D4AF37" style={{ marginRight: 6 }} />
+                ) : (
+                  <Ionicons name="person-add-outline" size={16} color="#D4AF37" style={{ marginRight: 6 }} />
+                )}
+                <Text style={styles.quickAddCustomerText}>
+                  {addingCustomerToDir ? "Saving to Directory..." : `+ Save "${customerName}" to Directory`}
+                </Text>
+              </TouchableOpacity>
+            )}
           </GlassCard>
 
           {/* Item Entry Section */}
@@ -1159,8 +1293,102 @@ const styles = StyleSheet.create({
     padding: 0,
   },
   inputCard: {
-    padding: 12,
+    padding: 14,
     marginBottom: 12,
+  },
+  customerCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  manageCustLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(212, 175, 55, 0.1)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 0.5,
+    borderColor: 'rgba(212, 175, 55, 0.3)',
+  },
+  manageCustText: {
+    color: '#D4AF37',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  customerInputContainer: {
+    position: 'relative',
+    zIndex: 20,
+    marginBottom: 8,
+  },
+  customerDropdownList: {
+    position: 'absolute',
+    top: 66,
+    left: 0,
+    right: 0,
+    backgroundColor: '#24242a',
+    borderWidth: 1.5,
+    borderColor: '#D4AF37',
+    borderRadius: 12,
+    zIndex: 200,
+    maxHeight: 200,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 10,
+  },
+  customerDropdownItem: {
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.06)',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  customerDropdownName: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  customerDropdownSub: {
+    color: '#A0A0B0',
+    fontSize: 11,
+    marginTop: 2,
+  },
+  autoFillBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(212, 175, 55, 0.15)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    marginLeft: 8,
+  },
+  autoFillText: {
+    color: '#D4AF37',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  quickAddCustomerBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    marginTop: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: '#D4AF37',
+    backgroundColor: 'rgba(212, 175, 55, 0.06)',
+  },
+  quickAddCustomerText: {
+    color: '#D4AF37',
+    fontSize: 12,
+    fontWeight: '700',
   },
   entryCard: {
     padding: 16,

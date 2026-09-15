@@ -171,8 +171,8 @@ const authSlice = createSlice({
       // Matcher to automatically log out on 401 Unauthorized or expired token
       .addMatcher(
         (action) => action.type.endsWith('/rejected'),
-        (state, action) => {
-          const payload = action.payload as any;
+        (state, action: any) => {
+          const payload = action.payload;
           const errorMessage = typeof payload === 'string' ? payload : (payload?.error || '');
           if (
             errorMessage.includes('Invalid, expired, or revoked access token') ||

@@ -1,9 +1,9 @@
 import { useBilling } from '@/context/BillingContext';
+import { useAlert } from '@/context/AlertContext';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   Modal,
   PermissionsAndroid,
@@ -31,6 +31,7 @@ interface SimulatedPrinter {
 
 export const PrinterSimulationModal: React.FC<PrinterSimulationModalProps> = ({ visible, onClose }) => {
   const { printerSettings, updatePrinterSettings } = useBilling();
+  const { showSuccess, showWarning, showError, showConfirm, showAlert } = useAlert();
   const [isSearching, setIsSearching] = useState(false);
   const [printers, setPrinters] = useState<SimulatedPrinter[]>([]);
 
@@ -122,13 +123,13 @@ export const PrinterSimulationModal: React.FC<PrinterSimulationModalProps> = ({ 
 
     const hasPermissions = await requestBluetoothPermissions();
     if (!hasPermissions) {
-      Alert.alert(
+      showConfirm(
         'Permissions Required',
-        'Bluetooth permissions are required to scan for real devices. Tapping OK will show simulator devices.',
-        [
-          { text: 'OK', onPress: () => runSimulationScan() },
-          { text: 'Cancel', onPress: () => setIsSearching(false), style: 'cancel' }
-        ]
+        'Bluetooth permissions are required to scan for real devices. Continue to show simulator devices?',
+        () => runSimulationScan(),
+        () => setIsSearching(false),
+        'Use Simulator',
+        'Cancel'
       );
       return;
     }
@@ -136,13 +137,13 @@ export const PrinterSimulationModal: React.FC<PrinterSimulationModalProps> = ({ 
     try {
       const isEnabled = await BluetoothManager.checkBluetoothEnabled();
       if (!isEnabled) {
-        Alert.alert(
+        showConfirm(
           'Bluetooth Disabled',
-          'Please turn on Bluetooth to scan for printers. Tapping OK will show simulator devices.',
-          [
-            { text: 'OK', onPress: () => runSimulationScan() },
-            { text: 'Cancel', onPress: () => setIsSearching(false), style: 'cancel' }
-          ]
+          'Please turn on Bluetooth to scan for printers. Continue to show simulator devices?',
+          () => runSimulationScan(),
+          () => setIsSearching(false),
+          'Use Simulator',
+          'Cancel'
         );
         return;
       }
@@ -204,7 +205,7 @@ export const PrinterSimulationModal: React.FC<PrinterSimulationModalProps> = ({ 
       setPrinters((prev) =>
         prev.map((p) => (p.id === printer.id ? { ...p, status: 'available' } : p))
       );
-      Alert.alert('Disconnected', `Disconnected from ${printer.name}`);
+      showWarning('Printer Disconnected', `Disconnected from ${printer.name}`);
     } else {
       // Connect
       if (BluetoothManager && printer.address) {
@@ -221,11 +222,11 @@ export const PrinterSimulationModal: React.FC<PrinterSimulationModalProps> = ({ 
             )
           );
           setIsSearching(false);
-          Alert.alert('Connected', `Successfully connected to ${printer.name}`);
+          showSuccess('Printer Connected', `Successfully connected to ${printer.name}`);
         } catch (err) {
           setIsSearching(false);
           console.warn('Bluetooth connection failed:', err);
-          Alert.alert(
+          showError(
             'Connection Failed', 
             `Could not connect to ${printer.name}. Please ensure the printer is turned on and paired in your Android Bluetooth system settings.`
           );
@@ -241,7 +242,7 @@ export const PrinterSimulationModal: React.FC<PrinterSimulationModalProps> = ({ 
             p.id === printer.id ? { ...p, status: 'connected' } : { ...p, status: 'available' }
           )
         );
-        Alert.alert('Simulated Connected', `Connected to simulated device: ${printer.name}`);
+        showSuccess('Simulator Connected', `Connected to simulated device: ${printer.name}`);
       }
     }
   };

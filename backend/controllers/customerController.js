@@ -56,7 +56,7 @@ exports.getCustomers = async (req, res) => {
  */
 exports.updateCustomer = async (req, res) => {
   const { id } = req.params;
-  const { phone, address, gstin, state, total_received, amountReceived } = req.body;
+  const { name, phone, address, gstin, state, total_received, amountReceived } = req.body;
 
   try {
     // Check customer ownership
@@ -76,15 +76,43 @@ exports.updateCustomer = async (req, res) => {
     }
 
     const updates = {};
-    if (phone !== undefined) updates.phone = phone;
-    if (address !== undefined) updates.address = address;
-    if (gstin !== undefined) updates.gstin = gstin;
-    if (state !== undefined) updates.state = state;
+    if (name !== undefined) updates.name = name.trim();
+    if (phone !== undefined) updates.phone = phone.trim();
+    if (address !== undefined) updates.address = address.trim();
+    if (gstin !== undefined) updates.gstin = gstin.trim().toUpperCase();
+    if (state !== undefined) updates.state = state.trim();
 
     if (total_received !== undefined) {
       updates.total_received = parseFloat(total_received);
     } else if (amountReceived !== undefined) {
       updates.total_received = parseFloat(customer.total_received || 0) + parseFloat(amountReceived);
+    }
+
+    // Check for duplicate name or phone with other customers (excluding self)
+    if (updates.name || updates.phone) {
+      const { data: existingCustomers } = await supabase
+        .from('customers')
+        .select('id, name, phone')
+        .eq('user_id', req.user.id)
+        .neq('id', id);
+
+      if (updates.name) {
+        const dupName = (existingCustomers || []).find(
+          c => c.name && c.name.trim().toLowerCase() === updates.name.toLowerCase()
+        );
+        if (dupName) {
+          return res.status(400).json({ error: `Another customer named "${updates.name}" already exists.` });
+        }
+      }
+
+      if (updates.phone) {
+        const dupPhone = (existingCustomers || []).find(
+          c => c.phone && c.phone.trim() === updates.phone
+        );
+        if (dupPhone) {
+          return res.status(400).json({ error: `Contact number "${updates.phone}" is already registered to "${dupPhone.name}".` });
+        }
+      }
     }
 
     updates.updated_at = new Date().toISOString();
@@ -129,27 +157,42 @@ exports.createCustomer = async (req, res) => {
     return res.status(400).json({ error: 'Customer name is required.' });
   }
 
-  try {
-    const { data: existingCustomer } = await supabase
-      .from('customers')
-      .select('id')
-      .eq('user_id', req.user.id)
-      .eq('name', name.trim())
-      .maybeSingle();
+  const trimmedName = name.trim();
+  const trimmedPhone = phone ? phone.trim() : '';
 
-    if (existingCustomer) {
-      return res.status(400).json({ error: 'A customer with this name already exists.' });
+  try {
+    // Check if customer with same name already exists (case-insensitive) or same phone
+    const { data: existingCustomers, error: queryError } = await supabase
+      .from('customers')
+      .select('id, name, phone')
+      .eq('user_id', req.user.id);
+
+    if (queryError) {
+      console.warn('Error querying existing customers:', queryError);
+    }
+
+    const duplicate = (existingCustomers || []).find(c => {
+      const sameName = c.name && c.name.trim().toLowerCase() === trimmedName.toLowerCase();
+      const samePhone = trimmedPhone && c.phone && c.phone.trim() === trimmedPhone;
+      return sameName || samePhone;
+    });
+
+    if (duplicate) {
+      if (duplicate.name && duplicate.name.trim().toLowerCase() === trimmedName.toLowerCase()) {
+        return res.status(400).json({ error: `A customer named "${trimmedName}" already exists in your directory.` });
+      }
+      return res.status(400).json({ error: `A customer with contact number "${trimmedPhone}" already exists (${duplicate.name}).` });
     }
 
     const { data: newCustomer, error: insertError } = await supabase
       .from('customers')
       .insert({
         user_id: req.user.id,
-        name: name.trim(),
-        phone: phone || '',
-        address: address || '',
-        gstin: gstin || '',
-        state: state || 'Tamil Nadu',
+        name: trimmedName,
+        phone: trimmedPhone,
+        address: address ? address.trim() : '',
+        gstin: gstin ? gstin.trim().toUpperCase() : '',
+        state: state ? state.trim() : 'Tamil Nadu',
         total_received: parseFloat(total_received || 0)
       })
       .select()
@@ -168,7 +211,10 @@ exports.createCustomer = async (req, res) => {
         address: newCustomer.address || '',
         gstin: newCustomer.gstin || '',
         state: newCustomer.state || 'Tamil Nadu',
-        totalReceived: parseFloat(newCustomer.total_received || 0)
+        totalBilled: 0,
+        totalReceived: parseFloat(newCustomer.total_received || 0),
+        pendingAmount: 0,
+        createdAt: newCustomer.created_at
       }
     });
   } catch (err) {
@@ -254,13 +300,21 @@ exports.recordPayment = async (req, res) => {
 };
 
 /**
- * Retrieve payment history for a specific customer
+ * Retrieve payment history and all purchase bills for a specific customer
  * GET /customers/:id/payments
  */
 exports.getCustomerPayments = async (req, res) => {
   const { id } = req.params;
 
   try {
+    // 0. Get customer details
+    const { data: customer } = await supabase
+      .from('customers')
+      .select('id, name')
+      .eq('id', id)
+      .eq('user_id', req.user.id)
+      .maybeSingle();
+
     // 1. Fetch all customer payment records
     const { data: payments, error: paymentsError } = await supabase
       .from('customer_payments')
@@ -273,11 +327,21 @@ exports.getCustomerPayments = async (req, res) => {
     }
 
     // 2. Fetch all bills associated with this customer
-    const { data: bills, error: billsError } = await supabase
+    let query = supabase
       .from('bills')
-      .select('*')
-      .eq('customer_id', id)
+      .select(`
+        *,
+        bill_items (*)
+      `)
       .eq('user_id', req.user.id);
+
+    if (customer && customer.name) {
+      query = query.or(`customer_id.eq.${id},customer_name.ilike.%${customer.name}%`);
+    } else {
+      query = query.eq('customer_id', id);
+    }
+
+    const { data: bills, error: billsError } = await query;
 
     if (billsError) {
       return res.status(400).json({ error: billsError.message });
@@ -285,12 +349,20 @@ exports.getCustomerPayments = async (req, res) => {
 
     // 3. Transform and combine them into a unified ledger
     const ledger = [];
+    const seenBillIds = new Set();
 
     // Add bills as debit entries
     (bills || []).forEach(bill => {
+      if (seenBillIds.has(String(bill.id))) return;
+      seenBillIds.add(String(bill.id));
+
+      const itemsSummary = (bill.bill_items || [])
+        .map(i => `${i.name} (${i.quantity} kg)`)
+        .join(', ');
+
       ledger.push({
         id: `bill-${bill.id}`,
-        customerId: String(bill.customer_id),
+        customerId: String(bill.customer_id || id),
         billId: String(bill.id),
         amount: parseFloat(bill.total),
         paymentMode: 'Billed',
@@ -298,7 +370,9 @@ exports.getCustomerPayments = async (req, res) => {
         createdAt: bill.created_at,
         type: 'bill',
         invoiceNumber: bill.invoice_number,
-        paymentStatus: bill.payment_status || 'Pending'
+        paymentStatus: bill.payment_status || 'Pending',
+        itemsCount: (bill.bill_items || []).length,
+        itemsSummary: itemsSummary
       });
     });
 

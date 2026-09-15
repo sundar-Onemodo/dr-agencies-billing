@@ -2,11 +2,11 @@ import { GlassCard } from '@/components/ui/GlassCard';
 import { GoldButton } from '@/components/ui/GoldButton';
 import { InputField } from '@/components/ui/InputField';
 import { useBilling } from '@/context/BillingContext';
+import { useAlert } from '@/context/AlertContext';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
-  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -19,6 +19,7 @@ import {
 export default function LoginScreen() {
   const router = useRouter();
   const { login } = useBilling();
+  const { showError } = useAlert();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -57,10 +58,10 @@ export default function LoginScreen() {
         // Successful login
         router.replace('/(tabs)');
       } else {
-        Alert.alert('Error', 'Invalid credentials. Please enter any email and 4+ character password.');
+        showError('Login Failed', 'Invalid credentials. Please enter a valid email and 4+ character password.');
       }
     } catch (err) {
-      Alert.alert('Error', 'Something went wrong. Please try again.');
+      showError('Login Error', 'Something went wrong. Please try again.');
     } finally {
       setIsLoading(false);
     }

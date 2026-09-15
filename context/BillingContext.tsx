@@ -6,8 +6,11 @@ import {
   addProduct as addProductThunk, 
   deleteProduct as deleteProductThunk,
   updateProduct as updateProductThunk,
-  fetchStockLedger
+  fetchStockLedger,
+  addStockQty as addStockQtyThunk,
+  StockLog
 } from '../store/slices/productSlice';
+import { API_URL } from '../constants/Api';
 import { 
   fetchRecentBills, 
   createBill as createBillThunk,
@@ -22,6 +25,8 @@ import {
 } from '../store/slices/printerSlice';
 import { 
   fetchCustomers, 
+  addCustomer as addCustomerThunk,
+  updateCustomer as updateCustomerThunk,
   updateCustomerPayment, 
   fetchCustomerPayments,
   Customer,
@@ -98,12 +103,17 @@ interface BillingContextType {
   generateNextInvoiceNumber: () => string;
   customers: Customer[];
   fetchCustomersList: () => Promise<void>;
+  addCustomer: (customerData: { name: string; phone?: string; address?: string; gstin?: string; state?: string; total_received?: number }) => Promise<Customer>;
+  updateCustomer: (customerData: { id: string; name?: string; phone?: string; address?: string; gstin?: string; state?: string }) => Promise<Customer>;
   recordCustomerPayment: (id: string, amount: number, paymentMode: string, paymentDate?: string) => Promise<void>;
   fetchCustomerPaymentsList: (customerId: string) => Promise<CustomerPayment[]>;
   customerPayments: Record<string, CustomerPayment[]>;
   fetchBillsRange: (from: string, to: string) => Promise<void>;
+  fetchReportBillsRange: (from: string, to: string) => Promise<Bill[]>;
   refreshData: () => Promise<void>;
   fetchStockLedgerList: (from?: string, to?: string) => Promise<any[]>;
+  addStockQty: (productId: string, quantity: number, referenceId?: string) => Promise<Product>;
+  fetchProductStockLogs: (productId?: string, from?: string, to?: string) => Promise<StockLog[]>;
 }
 
 const BillingContext = createContext<BillingContextType | undefined>(undefined);
@@ -114,6 +124,7 @@ export const BillingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   // Selectors
   const isAuthenticated = useAppSelector((state) => state.auth.isAuthenticated);
   const isInitialized = useAppSelector((state) => state.auth.isInitialized);
+  const token = useAppSelector((state) => state.auth.token);
   const products = useAppSelector((state) => state.products.items);
   const bills = useAppSelector((state) => state.bills.items);
   const companySettings = useAppSelector((state) => state.store.profile);
@@ -250,6 +261,22 @@ export const BillingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     await dispatch(fetchCustomers());
   };
 
+  const addCustomer = async (customerData: { name: string; phone?: string; address?: string; gstin?: string; state?: string; total_received?: number }): Promise<Customer> => {
+    const resultAction = await dispatch(addCustomerThunk(customerData));
+    if (addCustomerThunk.rejected.match(resultAction)) {
+      throw new Error(resultAction.payload as string || 'Failed to create customer');
+    }
+    return resultAction.payload as Customer;
+  };
+
+  const updateCustomer = async (customerData: { id: string; name?: string; phone?: string; address?: string; gstin?: string; state?: string }): Promise<Customer> => {
+    const resultAction = await dispatch(updateCustomerThunk(customerData));
+    if (updateCustomerThunk.rejected.match(resultAction)) {
+      throw new Error(resultAction.payload as string || 'Failed to update customer');
+    }
+    return resultAction.payload as Customer;
+  };
+
   const recordCustomerPayment = async (customerId: string, amount: number, paymentMode: string, paymentDate?: string): Promise<void> => {
     const resultAction = await dispatch(updateCustomerPayment({ id: customerId, amount, paymentMode, paymentDate }));
     if (updateCustomerPayment.rejected.match(resultAction)) {
@@ -294,6 +321,36 @@ export const BillingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return resultAction.payload as any[];
   };
 
+  const fetchReportBillsRange = async (from: string, to: string): Promise<Bill[]> => {
+    const response = await fetch(`${API_URL}/bills/recent?from=${from}&to=${to}`, {
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      }
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || 'Failed to fetch report bills');
+    }
+    return (data.bills || []) as Bill[];
+  };
+
+  const addStockQty = async (productId: string, quantity: number, referenceId?: string): Promise<Product> => {
+    const resultAction = await dispatch(addStockQtyThunk({ productId, quantity, referenceId }));
+    if (addStockQtyThunk.rejected.match(resultAction)) {
+      throw new Error(resultAction.payload as string || 'Failed to add stock quantity');
+    }
+    return resultAction.payload as Product;
+  };
+
+  const fetchProductStockLogs = async (productId?: string, from?: string, to?: string): Promise<StockLog[]> => {
+    const resultAction = await dispatch(fetchStockLedger({ productId, from, to }));
+    if (fetchStockLedger.rejected.match(resultAction)) {
+      throw new Error(resultAction.payload as string || 'Failed to fetch product stock logs');
+    }
+    return resultAction.payload as StockLog[];
+  };
+
   const updatePrinterSettings = (settings: Partial<PrinterSettings>) => {
     dispatch(updatePrinterSettingsAction(settings));
   };
@@ -319,11 +376,17 @@ export const BillingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         generateNextInvoiceNumber,
         customers,
         fetchCustomersList,
+        addCustomer,
+        updateCustomer,
         recordCustomerPayment,
         fetchCustomerPaymentsList,
+        customerPayments,
         fetchBillsRange,
+        fetchReportBillsRange,
         refreshData,
         fetchStockLedgerList,
+        addStockQty,
+        fetchProductStockLogs,
       }}
     >
       {children}

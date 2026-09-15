@@ -50,29 +50,11 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="products"
-        options={{
-          title: 'Products',
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons size={22} name={focused ? 'cube' : 'cube-outline'} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
         name="payments"
         options={{
           title: 'Ledger',
           tabBarIcon: ({ color, focused }) => (
             <Ionicons size={22} name={focused ? 'wallet' : 'wallet-outline'} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="reports"
-        options={{
-          title: 'Reports',
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons size={22} name={focused ? 'analytics' : 'analytics-outline'} color={color} />
           ),
         }}
       />
@@ -83,6 +65,18 @@ export default function TabLayout() {
           tabBarIcon: ({ color, focused }) => (
             <Ionicons size={22} name={focused ? 'settings' : 'settings-outline'} color={color} />
           ),
+        }}
+      />
+      <Tabs.Screen
+        name="products"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="reports"
+        options={{
+          href: null,
         }}
       />
     </Tabs>

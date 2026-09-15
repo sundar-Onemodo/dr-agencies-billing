@@ -1,10 +1,10 @@
 import React from 'react';
-import { StyleSheet, View, ViewProps, ViewStyle } from 'react-native';
+import { StyleSheet, View, ViewProps, ViewStyle, StyleProp } from 'react-native';
 import { Colors } from '@/constants/Colors';
 
 interface GlassCardProps extends ViewProps {
   children: React.ReactNode;
-  style?: ViewStyle;
+  style?: StyleProp<ViewStyle>;
   goldBorder?: boolean;
 }
 

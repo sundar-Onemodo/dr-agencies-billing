@@ -5,6 +5,10 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 interface InputFieldProps extends TextInputProps {
   label: string;
   iconName?: keyof typeof Ionicons.glyphMap;
+  rightIconName?: keyof typeof Ionicons.glyphMap;
+  onRightIconPress?: () => void;
+  showClearButton?: boolean;
+  onClear?: () => void;
   error?: string;
   containerStyle?: ViewStyle;
 }
@@ -12,6 +16,10 @@ interface InputFieldProps extends TextInputProps {
 export const InputField: React.FC<InputFieldProps> = ({
   label,
   iconName,
+  rightIconName,
+  onRightIconPress,
+  showClearButton,
+  onClear,
   error,
   containerStyle,
   onFocus,
@@ -21,9 +29,20 @@ export const InputField: React.FC<InputFieldProps> = ({
   const [isFocused, setIsFocused] = useState(false);
   const inputRef = useRef<TextInput>(null);
 
+  const hasValue = Boolean(props.value && props.value.length > 0);
+  const showClear = Boolean(showClearButton && hasValue);
+
+  const handleClear = () => {
+    if (onClear) {
+      onClear();
+    } else if (props.onChangeText) {
+      props.onChangeText('');
+    }
+  };
+
   return (
     <View style={[styles.container, containerStyle]}>
-      <Text style={[styles.label, isFocused && styles.focusedLabel]}>{label}</Text>
+      {label ? <Text style={[styles.label, isFocused && styles.focusedLabel]}>{label}</Text> : null}
       <Pressable
         onPress={() => inputRef.current?.focus()}
         style={[
@@ -54,6 +73,19 @@ export const InputField: React.FC<InputFieldProps> = ({
           }}
           {...props}
         />
+        {showClear ? (
+          <Pressable onPress={handleClear} hitSlop={8} style={styles.rightIconPressable}>
+            <Ionicons name="close-circle" size={18} color="#A0A0B0" />
+          </Pressable>
+        ) : rightIconName ? (
+          <Pressable onPress={onRightIconPress} hitSlop={8} style={styles.rightIconPressable}>
+            <Ionicons
+              name={rightIconName}
+              size={20}
+              color={isFocused ? '#D4AF37' : '#A0A0B0'}
+            />
+          </Pressable>
+        ) : null}
       </Pressable>
       {error && <Text style={styles.errorText}>{error}</Text>}
     </View>
@@ -110,5 +142,11 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 4,
     marginLeft: 6,
+  },
+  rightIconPressable: {
+    padding: 4,
+    marginLeft: 4,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });
