@@ -1,8 +1,8 @@
 import { GlassCard } from '@/components/ui/GlassCard';
 import { GoldButton } from '@/components/ui/GoldButton';
 import { InputField } from '@/components/ui/InputField';
-import { useBilling } from '@/context/BillingContext';
 import { useAlert } from '@/context/AlertContext';
+import { useBilling } from '@/context/BillingContext';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
@@ -144,7 +144,7 @@ export default function LoginScreen() {
 
         {/* Footer info */}
         <Text style={styles.footerText}>Secure, Fast & GST Compliant Billing System</Text>
-        <Text style={styles.footerVersion}>v1.0.0 (Expo)</Text>
+        <Text style={styles.footerVersion}>v1.0.0</Text>
       </ScrollView>
     </KeyboardAvoidingView>
   );
