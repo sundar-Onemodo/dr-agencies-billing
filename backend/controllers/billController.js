@@ -825,8 +825,7 @@ exports.updateBill = async (req, res) => {
       cgst: parseFloat(cgst || 0),
       sgst: parseFloat(sgst || 0),
       total: parseFloat(total),
-      payment_status: finalPaymentStatus,
-      updated_at: new Date().toISOString()
+      payment_status: finalPaymentStatus
     };
 
     const { data: updatedBillRecord, error: updateBillErr } = await supabase
