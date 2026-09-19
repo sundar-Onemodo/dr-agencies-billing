@@ -1,18 +1,62 @@
-import { Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 /**
- * API Connection URL Configuration.
- * 
- * - iOS Simulator / Web: http://localhost:5000
- * - Android Emulator: http://10.0.2.2:5000 (maps to your computer's localhost)
- * - Physical test device: Replace with your PC's local Wi-Fi IP (e.g., http://192.168.1.15:5000)
- * - Production: Replace with your deployed server URL (e.g., https://your-backend.onrender.com)
+ * Backend API URLs
  */
-const LOCAL_API_URL = Platform.select({
-  android: 'https://dr-agencies-billing.vercel.app',
-  ios: 'https://dr-agencies-billing.vercel.app',
-  default: 'https://dr-agencies-billing.vercel.app',
-});
+export const LIVE_API_URL = 'https://dr-agencies-billing.vercel.app';
+export const TEST_API_URL = 'https://dr-agencies-billing-test.vercel.app';
 
-// Uses local server in development, Vercel in production
-export const API_URL = LOCAL_API_URL;
+export type AppEnvironment = 'LIVE' | 'TEST';
+
+export const ENV_STORAGE_KEY = '@dr_agencies_environment';
+
+// Default active environment
+let currentEnvironment: AppEnvironment = 'LIVE';
+let activeApiUrl: string = LIVE_API_URL;
+
+/**
+ * Dynamic object that stringifies to current activeApiUrl.
+ * Works seamlessly in template literals `${API_URL}/endpoint` without restarting the app.
+ */
+class DynamicApiUrl {
+  toString(): string {
+    return activeApiUrl;
+  }
+  valueOf(): string {
+    return activeApiUrl;
+  }
+  [Symbol.toPrimitive](): string {
+    return activeApiUrl;
+  }
+}
+
+export const API_URL = new DynamicApiUrl() as unknown as string;
+
+export const getApiUrl = (): string => activeApiUrl;
+
+export const getCurrentEnvironment = (): AppEnvironment => currentEnvironment;
+
+export const setAppEnvironment = async (env: AppEnvironment): Promise<void> => {
+  currentEnvironment = env;
+  activeApiUrl = env === 'TEST' ? TEST_API_URL : LIVE_API_URL;
+  try {
+    await AsyncStorage.setItem(ENV_STORAGE_KEY, env);
+  } catch (e) {
+    console.error('Failed to save environment:', e);
+  }
+};
+
+export const loadStoredEnvironment = async (): Promise<AppEnvironment> => {
+  try {
+    const savedEnv = await AsyncStorage.getItem(ENV_STORAGE_KEY);
+    if (savedEnv === 'TEST' || savedEnv === 'LIVE') {
+      currentEnvironment = savedEnv;
+      activeApiUrl = savedEnv === 'TEST' ? TEST_API_URL : LIVE_API_URL;
+      return savedEnv;
+    }
+  } catch (e) {
+    console.error('Failed to load environment:', e);
+  }
+  return currentEnvironment;
+};
+

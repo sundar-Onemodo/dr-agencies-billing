@@ -3,9 +3,17 @@ import { GoldButton } from '@/components/ui/GoldButton';
 import { InputField } from '@/components/ui/InputField';
 import { useAlert } from '@/context/AlertContext';
 import { useBilling } from '@/context/BillingContext';
+import {
+  AppEnvironment,
+  LIVE_API_URL,
+  TEST_API_URL,
+  getCurrentEnvironment,
+  loadStoredEnvironment,
+  setAppEnvironment,
+} from '@/constants/Api';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -26,7 +34,23 @@ export default function LoginScreen() {
   const [rememberMe, setRememberMe] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   
+  // Environment State (LIVE vs TEST)
+  const [environment, setEnvironment] = useState<AppEnvironment>(getCurrentEnvironment());
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
+
+  useEffect(() => {
+    loadStoredEnvironment().then((savedEnv) => {
+      setEnvironment(savedEnv);
+    });
+  }, []);
+
+  const handleSelectEnvironment = async (env: AppEnvironment) => {
+    setEnvironment(env);
+    setIsDropdownOpen(false);
+    await setAppEnvironment(env);
+  };
 
   const validate = () => {
     const newErrors: { email?: string; password?: string } = {};
@@ -58,14 +82,19 @@ export default function LoginScreen() {
         // Successful login
         router.replace('/(tabs)');
       } else {
-        showError('Login Failed', 'Invalid credentials. Please enter a valid email and 4+ character password.');
+        showError(
+          'Login Failed',
+          `Invalid credentials for ${environment === 'LIVE' ? 'Live' : 'Testing'} server. Please check your login details.`
+        );
       }
     } catch (err) {
-      showError('Login Error', 'Something went wrong. Please try again.');
+      showError('Login Error', 'Something went wrong. Please check your internet connection.');
     } finally {
       setIsLoading(false);
     }
   };
+
+  const isLive = environment === 'LIVE';
 
   return (
     <KeyboardAvoidingView
@@ -87,6 +116,130 @@ export default function LoginScreen() {
         <GlassCard style={styles.card}>
           <Text style={styles.welcomeText}>Welcome Back</Text>
           <Text style={styles.subWelcomeText}>Sign in to manage your billing</Text>
+
+          {/* Environment Selector Dropdown */}
+          <View style={styles.envSection}>
+            <Text style={styles.envLabel}>SERVER ENVIRONMENT</Text>
+            
+            <TouchableOpacity
+              style={[
+                styles.envSelector,
+                isLive ? styles.envSelectorLive : styles.envSelectorTest,
+              ]}
+              activeOpacity={0.8}
+              onPress={() => setIsDropdownOpen(!isDropdownOpen)}
+            >
+              <View style={styles.envSelectorLeft}>
+                <View
+                  style={[
+                    styles.envDot,
+                    { backgroundColor: isLive ? '#22C55E' : '#F59E0B' },
+                  ]}
+                />
+                <View>
+                  <Text style={styles.envSelectorText}>
+                    {isLive ? 'Live Server (Production)' : 'Testing Server (Staging)'}
+                  </Text>
+                  <Text style={styles.envSelectorUrl} numberOfLines={1}>
+                    {isLive ? LIVE_API_URL : TEST_API_URL}
+                  </Text>
+                </View>
+              </View>
+              <Ionicons
+                name={isDropdownOpen ? 'chevron-up' : 'chevron-down'}
+                size={18}
+                color="#D4AF37"
+              />
+            </TouchableOpacity>
+
+            {/* Dropdown Options Menu */}
+            {isDropdownOpen && (
+              <View style={styles.dropdownMenu}>
+                {/* Live Option */}
+                <TouchableOpacity
+                  style={[
+                    styles.dropdownItem,
+                    isLive && styles.dropdownItemActive,
+                  ]}
+                  activeOpacity={0.7}
+                  onPress={() => handleSelectEnvironment('LIVE')}
+                >
+                  <View style={styles.dropdownItemLeft}>
+                    <View style={[styles.envDot, { backgroundColor: '#22C55E' }]} />
+                    <View>
+                      <Text
+                        style={[
+                          styles.dropdownItemTitle,
+                          isLive && styles.dropdownItemTitleActive,
+                        ]}
+                      >
+                        Live Server (Production)
+                      </Text>
+                      <Text style={styles.dropdownItemDesc}>
+                        Live client data (yuvi12@gmail.com)
+                      </Text>
+                    </View>
+                  </View>
+                  {isLive && <Ionicons name="checkmark-circle" size={18} color="#22C55E" />}
+                </TouchableOpacity>
+
+                {/* Divider */}
+                <View style={styles.dropdownDivider} />
+
+                {/* Testing Option */}
+                <TouchableOpacity
+                  style={[
+                    styles.dropdownItem,
+                    !isLive && styles.dropdownItemActive,
+                  ]}
+                  activeOpacity={0.7}
+                  onPress={() => handleSelectEnvironment('TEST')}
+                >
+                  <View style={styles.dropdownItemLeft}>
+                    <View style={[styles.envDot, { backgroundColor: '#F59E0B' }]} />
+                    <View>
+                      <Text
+                        style={[
+                          styles.dropdownItemTitle,
+                          !isLive && styles.dropdownItemTitleActive,
+                        ]}
+                      >
+                        Testing Server (Staging)
+                      </Text>
+                      <Text style={styles.dropdownItemDesc}>
+                        Safe testing for bills, stock & test users
+                      </Text>
+                    </View>
+                  </View>
+                  {!isLive && <Ionicons name="checkmark-circle" size={18} color="#F59E0B" />}
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* Status Hint Badge */}
+            <View
+              style={[
+                styles.envBadge,
+                isLive ? styles.envBadgeLive : styles.envBadgeTest,
+              ]}
+            >
+              <Ionicons
+                name={isLive ? 'shield-checkmark-outline' : 'flask-outline'}
+                size={14}
+                color={isLive ? '#22C55E' : '#F59E0B'}
+              />
+              <Text
+                style={[
+                  styles.envBadgeText,
+                  { color: isLive ? '#22C55E' : '#F59E0B' },
+                ]}
+              >
+                {isLive
+                  ? 'Connected to Live Server'
+                  : 'Testing Mode Active • Safe from Live Data'}
+              </Text>
+            </View>
+          </View>
 
           <InputField
             label="Email or Mobile Number"
@@ -135,7 +288,7 @@ export default function LoginScreen() {
           </View>
 
           <GoldButton
-            title="LOG IN"
+            title={isLive ? 'LOG IN TO LIVE' : 'LOG IN TO TEST'}
             onPress={handleLogin}
             loading={isLoading}
             style={styles.button}
@@ -163,7 +316,7 @@ const styles = StyleSheet.create({
   },
   logoContainer: {
     alignItems: 'center',
-    marginBottom: 32,
+    marginBottom: 24,
   },
   logoBadge: {
     width: 70,
@@ -175,7 +328,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 16,
-    // Accent shadow
     shadowColor: '#D4AF37',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
@@ -215,7 +367,114 @@ const styles = StyleSheet.create({
     color: '#A0A0B0',
     fontSize: 13,
     marginTop: 4,
-    marginBottom: 20,
+    marginBottom: 16,
+  },
+  envSection: {
+    marginBottom: 18,
+  },
+  envLabel: {
+    color: '#A0A0B0',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1,
+    marginBottom: 6,
+  },
+  envSelector: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#15151b',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderWidth: 1.5,
+  },
+  envSelectorLive: {
+    borderColor: '#22C55E40',
+  },
+  envSelectorTest: {
+    borderColor: '#F59E0B60',
+  },
+  envSelectorLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: 8,
+  },
+  envDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    marginRight: 10,
+  },
+  envSelectorText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  envSelectorUrl: {
+    color: '#71717A',
+    fontSize: 11,
+    marginTop: 2,
+  },
+  dropdownMenu: {
+    backgroundColor: '#1F1F28',
+    borderRadius: 10,
+    marginTop: 6,
+    borderWidth: 1,
+    borderColor: '#3F3F46',
+    overflow: 'hidden',
+  },
+  dropdownItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  dropdownItemActive: {
+    backgroundColor: '#272733',
+  },
+  dropdownItemLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  dropdownItemTitle: {
+    color: '#D4D4D8',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  dropdownItemTitleActive: {
+    color: '#FFFFFF',
+  },
+  dropdownItemDesc: {
+    color: '#71717A',
+    fontSize: 11,
+    marginTop: 2,
+  },
+  dropdownDivider: {
+    height: 1,
+    backgroundColor: '#2E2E38',
+  },
+  envBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+    marginTop: 8,
+    gap: 6,
+  },
+  envBadgeLive: {
+    backgroundColor: '#22C55E15',
+  },
+  envBadgeTest: {
+    backgroundColor: '#F59E0B15',
+  },
+  envBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
   },
   optionsRow: {
     flexDirection: 'row',
@@ -269,3 +528,4 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
 });
+

@@ -10,7 +10,7 @@ import {
   addStockQty as addStockQtyThunk,
   StockLog
 } from '../store/slices/productSlice';
-import { API_URL } from '../constants/Api';
+import { API_URL, loadStoredEnvironment } from '../constants/Api';
 import { 
   fetchRecentBills, 
   createBill as createBillThunk,
@@ -134,9 +134,11 @@ export const BillingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const customers = useAppSelector((state) => state.customers.items);
   const customerPayments = useAppSelector((state) => state.customers.payments);
 
-  // Fetch initial auth state from storage
+  // Fetch initial auth state and environment from storage
   useEffect(() => {
-    dispatch(initializeAuth());
+    loadStoredEnvironment().finally(() => {
+      dispatch(initializeAuth());
+    });
   }, [dispatch]);
 
   // Fetch initial data when authenticated
