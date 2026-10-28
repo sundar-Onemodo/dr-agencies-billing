@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   StyleSheet,
   Text,
@@ -83,6 +83,10 @@ export default function CreateBillScreen() {
   const [editItemPrice, setEditItemPrice] = useState('');
   const [editItemName, setEditItemName] = useState('');
   const [editItemGstRate, setEditItemGstRate] = useState(18);
+  const [editItemProductId, setEditItemProductId] = useState<string | undefined>(undefined);
+  const [selectedEditProduct, setSelectedEditProduct] = useState<Product | null>(null);
+  const [editProductSearchQuery, setEditProductSearchQuery] = useState('');
+  const [showEditProductDropdown, setShowEditProductDropdown] = useState(false);
 
   // Active Bill States
   const [invoiceNo, setInvoiceNo] = useState('');
@@ -119,12 +123,53 @@ export default function CreateBillScreen() {
   const [savedBillForActions, setSavedBillForActions] = useState<any>(null);
   const [refreshing, setRefreshing] = useState(false);
 
+  const loadedBillIdRef = useRef<string | null>(null);
+
+  // Helper to completely reset the form to a fresh "New Bill" state
+  const resetToNewBill = useCallback(() => {
+    setEditingBillId(null);
+    setOriginalBillItems([]);
+    setCustomerName('');
+    setCustomerAddress('');
+    setCustomerPhone('');
+    setCustomerGstin('');
+    setCustomerState('Tamil Nadu');
+    setItems([]);
+    setPaymentStatus('Pending');
+    setPaymentMode('Cash');
+    setGstEnabled(true);
+    setInvoiceNo(generateNextInvoiceNumber());
+    const today = new Date();
+    const dd = String(today.getDate()).padStart(2, '0');
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const yyyy = today.getFullYear();
+    setBillingDate(`${dd}-${mm}-${yyyy}`);
+    try {
+      router.setParams({ editBillId: '' });
+    } catch {
+      // ignore
+    }
+  }, [generateNextInvoiceNumber, router]);
+
   // Load / Pre-fill Bill Info or Initialize New Bill
   useEffect(() => {
-    if (editBillId) {
-      setEditingBillId(editBillId);
-      const existing = bills.find((b) => b.id === editBillId);
+    const validEditId =
+      editBillId &&
+      editBillId !== 'undefined' &&
+      editBillId !== 'null' &&
+      editBillId !== ''
+        ? editBillId
+        : null;
+
+    if (validEditId) {
+      if (loadedBillIdRef.current === validEditId) {
+        return;
+      }
+
+      const existing = bills.find((b) => b.id === validEditId);
       if (existing) {
+        loadedBillIdRef.current = validEditId;
+        setEditingBillId(validEditId);
         setInvoiceNo(existing.invoiceNumber || existing.id);
         const customerInfo = parseCustomerInfo(existing.customerName);
         setCustomerName(customerInfo.name);
@@ -135,9 +180,10 @@ export default function CreateBillScreen() {
 
         if (existing.date) {
           try {
-            const d = existing.date.includes('T') || existing.date.match(/^\d{4}-\d{2}-\d{2}/)
-              ? new Date(existing.date)
-              : null;
+            const d =
+              existing.date.includes('T') || existing.date.match(/^\d{4}-\d{2}-\d{2}/)
+                ? new Date(existing.date)
+                : null;
             if (d) {
               const dd = String(d.getDate()).padStart(2, '0');
               const mm = String(d.getMonth() + 1).padStart(2, '0');
@@ -166,16 +212,14 @@ export default function CreateBillScreen() {
         setPaymentStatus((existing.paymentStatus as any) || 'Pending');
       }
     } else {
-      setEditingBillId(null);
-      setOriginalBillItems([]);
-      setInvoiceNo(generateNextInvoiceNumber());
-      const today = new Date();
-      const dd = String(today.getDate()).padStart(2, '0');
-      const mm = String(today.getMonth() + 1).padStart(2, '0');
-      const yyyy = today.getFullYear();
-      setBillingDate(`${dd}-${mm}-${yyyy}`);
+      if (loadedBillIdRef.current !== null || editingBillId !== null) {
+        loadedBillIdRef.current = null;
+        resetToNewBill();
+      } else if (!invoiceNo) {
+        resetToNewBill();
+      }
     }
-  }, [editBillId, bills, generateNextInvoiceNumber]);
+  }, [editBillId, bills, generateNextInvoiceNumber, resetToNewBill, products, editingBillId, invoiceNo]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -192,18 +236,8 @@ export default function CreateBillScreen() {
   };
 
   const handleCancelEdit = () => {
-    setEditingBillId(null);
-    router.setParams({ editBillId: undefined });
-    setCustomerName('');
-    setCustomerAddress('');
-    setCustomerPhone('');
-    setCustomerGstin('');
-    setCustomerState('Tamil Nadu');
-    setItems([]);
-    setOriginalBillItems([]);
-    setPaymentStatus('Pending');
-    setPaymentMode('Cash');
-    setInvoiceNo(generateNextInvoiceNumber());
+    loadedBillIdRef.current = null;
+    resetToNewBill();
   };
 
   // Filter customers matching customerName input
@@ -424,8 +458,137 @@ export default function CreateBillScreen() {
     setEditItemQty(String(item.qty));
     setEditItemPrice(String(item.price));
     setEditItemName(item.name);
-    setEditItemGstRate(item.gstRate !== undefined ? item.gstRate : parseGstRateFromName(item.name));
+
+    const cleanName = item.name.replace(/\(.*?\)/g, '').trim().toLowerCase();
+    const matchedProd = products.find(
+      (p) =>
+        (item.productId && String(p.id) === String(item.productId)) ||
+        p.name.replace(/\(.*?\)/g, '').trim().toLowerCase() === cleanName
+    );
+
+    setSelectedEditProduct(matchedProd || null);
+    setEditItemProductId(matchedProd ? matchedProd.id : item.productId);
+
+    const parsed = parseItemNameAndHsn(item.name);
+    setEditProductSearchQuery(parsed.name || item.name);
+
+    const gstRateVal =
+      item.gstRate !== undefined
+        ? item.gstRate
+        : matchedProd
+        ? matchedProd.gstRate
+        : parseGstRateFromName(item.name);
+    setEditItemGstRate(gstRateVal);
+    setShowEditProductDropdown(false);
     setEditingItemModalVisible(true);
+  };
+
+  const handleSelectEditProduct = (p: Product) => {
+    // Check if this product is already in another row in this bill
+    const isAlreadyInBill = items.some(
+      (it) =>
+        it.id !== editingItem?.id &&
+        ((it.productId && String(it.productId) === String(p.id)) ||
+          it.name.replace(/\(.*?\)/g, '').trim().toLowerCase() === p.name.replace(/\(.*?\)/g, '').trim().toLowerCase())
+    );
+
+    if (isAlreadyInBill) {
+      showWarning(
+        'Item Already in Invoice',
+        `"${p.name}" is already in this invoice in another row.\n\nPlease edit that row directly or select a different product.`
+      );
+      return;
+    }
+
+    // Check available stock (store stock + original bill quantity for this product)
+    const originalBillQty = editingBillId
+      ? originalBillItems
+          .filter(
+            (it) =>
+              (it.productId && String(it.productId) === String(p.id)) ||
+              it.name.replace(/\(.*?\)/g, '').trim().toLowerCase() === p.name.replace(/\(.*?\)/g, '').trim().toLowerCase()
+          )
+          .reduce((sum, it) => sum + it.qty, 0)
+      : 0;
+
+    const otherItemsQty = items
+      .filter((it) => it.id !== editingItem?.id && (
+        (it.productId && String(it.productId) === String(p.id)) ||
+        it.name.replace(/\(.*?\)/g, '').trim().toLowerCase() === p.name.replace(/\(.*?\)/g, '').trim().toLowerCase()
+      ))
+      .reduce((sum, it) => sum + it.qty, 0);
+
+    const totalAllowed = (p.stockQty + originalBillQty) - otherItemsQty;
+    if (totalAllowed <= 0) {
+      showWarning('Out of Stock', `"${p.name}" is currently out of stock (0 kg available).`);
+      return;
+    }
+
+    setSelectedEditProduct(p);
+    setEditItemProductId(p.id);
+    const parsed = parseItemNameAndHsn(p.name);
+    setEditProductSearchQuery(parsed.name);
+    setEditItemName(`${p.name} (GST: ${p.gstRate}%)`);
+    setEditItemPrice(p.price.toString());
+    setEditItemGstRate(p.gstRate);
+
+    // If current entered quantity exceeds total available of the newly selected product, cap it
+    const currentQ = parseFloat(editItemQty) || 0;
+    if (currentQ > totalAllowed) {
+      setEditItemQty(String(Number(totalAllowed.toFixed(2))));
+    }
+    setShowEditProductDropdown(false);
+  };
+
+  const getEditModalStockInfo = () => {
+    if (!editingItem) return null;
+
+    const targetProd = selectedEditProduct || products.find(
+      (p) =>
+        (editItemProductId && String(p.id) === String(editItemProductId)) ||
+        p.name.replace(/\(.*?\)/g, '').trim().toLowerCase() === editItemName.replace(/\(.*?\)/g, '').trim().toLowerCase()
+    );
+
+    if (!targetProd) {
+      return {
+        matchedProd: null,
+        currentBillItemQty: 0,
+        remainingStoreStock: 9999,
+        maxAllowed: 9999,
+      };
+    }
+
+    const wasSameInItem = editingItem.productId && targetProd
+      ? String(editingItem.productId) === String(targetProd.id)
+      : editingItem.name.replace(/\(.*?\)/g, '').trim().toLowerCase() === targetProd.name.replace(/\(.*?\)/g, '').trim().toLowerCase();
+
+    const originalBillQty = editingBillId
+      ? originalBillItems
+          .filter(
+            (it) =>
+              (it.productId && String(it.productId) === String(targetProd.id)) ||
+              it.name.replace(/\(.*?\)/g, '').trim().toLowerCase() === targetProd.name.replace(/\(.*?\)/g, '').trim().toLowerCase()
+          )
+          .reduce((sum, it) => sum + it.qty, 0)
+      : 0;
+
+    const otherItemsQty = items
+      .filter((it) => it.id !== editingItem.id && (
+        (it.productId && String(it.productId) === String(targetProd.id)) ||
+        it.name.replace(/\(.*?\)/g, '').trim().toLowerCase() === targetProd.name.replace(/\(.*?\)/g, '').trim().toLowerCase()
+      ))
+      .reduce((sum, it) => sum + it.qty, 0);
+
+    const maxAllowed = Math.max(0, (targetProd.stockQty + originalBillQty) - otherItemsQty);
+    const inThisBillQty = wasSameInItem ? (editingItem.qty || 0) : 0;
+    const remainingStoreStock = targetProd.stockQty;
+
+    return {
+      matchedProd: targetProd,
+      currentBillItemQty: inThisBillQty,
+      remainingStoreStock,
+      maxAllowed,
+    };
   };
 
   const handleAdjustEditQty = (delta: number) => {
@@ -433,22 +596,12 @@ export default function CreateBillScreen() {
     let next = current + delta;
     if (next < 0.5) next = 0.5;
 
-    const stockInfo = getProductStockInfo(editingItem?.productId, editItemName);
-    if (stockInfo.matchedProd) {
-      const currentItemQty = editingItem?.qty || 0;
-      const otherItemsQty = items
-        .filter((it) => it.id !== editingItem?.id && (
-          (it.productId && it.productId === stockInfo.matchedProd?.id) ||
-          it.name.replace(/\(.*?\)/g, '').trim().toLowerCase() === editItemName.replace(/\(.*?\)/g, '').trim().toLowerCase()
-        ))
-        .reduce((sum, it) => sum + it.qty, 0);
-
-      const maxAllowed = stockInfo.maxAllowed - otherItemsQty;
-
-      if (delta > 0 && next > maxAllowed) {
+    const modalStock = getEditModalStockInfo();
+    if (modalStock && modalStock.matchedProd) {
+      if (delta > 0 && next > modalStock.maxAllowed) {
         showWarning(
           'Stock Limit Reached',
-          `Cannot increase quantity beyond ${maxAllowed} kg (${currentItemQty} kg in this bill + ${stockInfo.remainingStoreStock} kg remaining in store).`
+          `Cannot increase quantity beyond ${modalStock.maxAllowed} kg (${modalStock.maxAllowed} kg available).`
         );
         return;
       }
@@ -471,25 +624,30 @@ export default function CreateBillScreen() {
       return;
     }
 
-    const stockInfo = getProductStockInfo(editingItem.productId, editItemName);
-    if (stockInfo.matchedProd) {
-      const currentItemQty = editingItem.qty || 0;
-      const otherItemsQty = items
-        .filter((it) => it.id !== editingItem.id && (
-          (it.productId && it.productId === stockInfo.matchedProd?.id) ||
-          it.name.replace(/\(.*?\)/g, '').trim().toLowerCase() === editItemName.replace(/\(.*?\)/g, '').trim().toLowerCase()
-        ))
-        .reduce((sum, it) => sum + it.qty, 0);
-
-      const maxAllowed = stockInfo.maxAllowed - otherItemsQty;
-
-      if (q > maxAllowed) {
+    const modalStock = getEditModalStockInfo();
+    if (modalStock && modalStock.matchedProd) {
+      if (q > modalStock.maxAllowed) {
         showWarning(
           'Insufficient Stock',
-          `Cannot set quantity to ${q} kg. Maximum allowed is ${maxAllowed} kg (${currentItemQty} kg in this bill + ${stockInfo.remainingStoreStock} kg remaining in store).`
+          `Cannot set quantity to ${q} kg. Maximum allowed is ${modalStock.maxAllowed} kg.`
         );
         return;
       }
+    }
+
+    const matchedProd = modalStock?.matchedProd;
+    const finalProductId = matchedProd
+      ? String(matchedProd.id)
+      : editItemProductId
+      ? String(editItemProductId)
+      : undefined;
+
+    const gstRateVal = editItemGstRate;
+    let finalItemName = editItemName.trim();
+    if (matchedProd) {
+      finalItemName = `${matchedProd.name} (GST: ${gstRateVal}%)`;
+    } else if (!finalItemName.includes('GST:')) {
+      finalItemName = `${finalItemName} (GST: ${gstRateVal}%)`;
     }
 
     const amount = q * p;
@@ -498,20 +656,28 @@ export default function CreateBillScreen() {
         if (it.id === editingItem.id) {
           return {
             ...it,
-            name: editItemName,
+            name: finalItemName,
             qty: q,
             price: p,
             amount,
-            gstRate: editItemGstRate,
-            productId: it.productId || stockInfo.matchedProd?.id,
+            gstRate: gstRateVal,
+            productId: finalProductId,
           };
         }
         return it;
       })
     );
 
+    handleCloseEditModal();
+  };
+
+  const handleCloseEditModal = () => {
     setEditingItemModalVisible(false);
     setEditingItem(null);
+    setSelectedEditProduct(null);
+    setEditItemProductId(undefined);
+    setEditProductSearchQuery('');
+    setShowEditProductDropdown(false);
   };
 
   const handleDeleteItem = (id: string) => {
@@ -599,18 +765,40 @@ export default function CreateBillScreen() {
     try {
       setSaving(true);
       if (editingBillId) {
+        const savedBillId = editingBillId;
+        const savedInvoiceNo = invoiceNo;
+
         await updateBill(editingBillId, finalBill);
-        showSuccess(
-          'Invoice Updated',
-          `Invoice "${invoiceNo}" has been updated successfully!`,
-          () => {
-            router.push({
-              pathname: '/preview',
-              params: { billId: editingBillId }
-            });
-          },
-          'checkmark-done'
-        );
+
+        // Instantly reset the form so New Bill is active and ready
+        loadedBillIdRef.current = null;
+        resetToNewBill();
+
+        showAlert({
+          title: 'Invoice Updated',
+          message: `Invoice "${savedInvoiceNo}" has been updated successfully!`,
+          type: 'success',
+          iconName: 'checkmark-circle',
+          buttons: [
+            {
+              text: '+ Create New Bill',
+              style: 'cancel',
+              onPress: () => {
+                // Form is already reset and ready to create a new bill
+              },
+            },
+            {
+              text: 'View Invoice',
+              style: 'default',
+              onPress: () => {
+                router.push({
+                  pathname: '/preview',
+                  params: { billId: savedBillId },
+                });
+              },
+            },
+          ],
+        });
       } else {
         const newInvoiceNo = await addBill(finalBill);
         
@@ -811,18 +999,8 @@ export default function CreateBillScreen() {
   const handleClosePostSaveModal = () => {
     setShowPostSaveModal(false);
     setSavedBillForActions(null);
-    
-    // Reset Form
-    setCustomerName('');
-    setCustomerAddress('');
-    setCustomerPhone('');
-    setCustomerGstin('');
-    setCustomerState('Tamil Nadu');
-    setItems([]);
-    setOriginalBillItems([]);
-    setPaymentStatus('Pending');
-    setPaymentMode('Cash');
-    setInvoiceNo(generateNextInvoiceNumber());
+    loadedBillIdRef.current = null;
+    resetToNewBill();
   };
 
   // Preview Bill
@@ -1564,7 +1742,7 @@ export default function CreateBillScreen() {
         visible={editingItemModalVisible}
         transparent={true}
         animationType="fade"
-        onRequestClose={() => setEditingItemModalVisible(false)}
+        onRequestClose={handleCloseEditModal}
       >
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -1580,177 +1758,345 @@ export default function CreateBillScreen() {
                 <View style={{ flex: 1, marginLeft: 10 }}>
                   <Text style={styles.editItemModalTitle}>Edit Item</Text>
                   <Text style={styles.editItemModalSubtitle} numberOfLines={1}>
-                    {editingItem?.name}
+                    {selectedEditProduct ? selectedEditProduct.name : editItemName}
                   </Text>
                 </View>
               </View>
               <TouchableOpacity
-                onPress={() => setEditingItemModalVisible(false)}
+                onPress={handleCloseEditModal}
                 style={styles.editItemCloseBtn}
               >
                 <Ionicons name="close" size={22} color="#A0A0B0" />
               </TouchableOpacity>
             </View>
 
-            {/* Stock breakdown calculation card */}
-            {(() => {
-              if (!editingItem) return null;
-              const stockInfo = getProductStockInfo(editingItem.productId, editItemName);
-              if (!stockInfo.matchedProd) return null;
-
-              const currentBillItemQty = editingItem.qty || 0;
-              const remainingStoreStock = stockInfo.remainingStoreStock;
-              const otherItemsQty = items
-                .filter((it) => it.id !== editingItem.id && (
-                  (it.productId && it.productId === stockInfo.matchedProd?.id) ||
-                  it.name.replace(/\(.*?\)/g, '').trim().toLowerCase() === (editItemName || '').replace(/\(.*?\)/g, '').trim().toLowerCase()
-                ))
-                .reduce((sum, it) => sum + it.qty, 0);
-
-              const maxAllowed = stockInfo.maxAllowed - otherItemsQty;
-
-              return (
-                <View style={styles.stockBreakdownContainer}>
-                  <View style={styles.stockBreakdownRow}>
-                    <View style={styles.stockBreakdownBox}>
-                      <Text style={styles.stockBreakdownLabel}>In This Bill</Text>
-                      <Text style={styles.stockBreakdownValue}>{currentBillItemQty} kg</Text>
-                    </View>
-                    <Text style={styles.stockBreakdownSign}>+</Text>
-                    <View style={styles.stockBreakdownBox}>
-                      <Text style={styles.stockBreakdownLabel}>Store Stock</Text>
-                      <Text
-                        style={[
-                          styles.stockBreakdownValue,
-                          remainingStoreStock <= 0 && { color: '#FF4B4B' },
-                        ]}
-                      >
-                        {remainingStoreStock} kg
-                      </Text>
-                    </View>
-                    <Text style={styles.stockBreakdownSign}>=</Text>
-                    <View style={[styles.stockBreakdownBox, styles.stockBreakdownBoxTotal]}>
-                      <Text style={styles.stockBreakdownLabelTotal}>Max Allowed</Text>
-                      <Text style={styles.stockBreakdownValueTotal}>{maxAllowed} kg</Text>
-                    </View>
-                  </View>
-                </View>
-              );
-            })()}
-
-            {/* Quantity Stepper & Direct Input */}
-            <View style={styles.editFieldSection}>
-              <Text style={styles.editFieldLabel}>Quantity (kg)</Text>
-              <View style={styles.stepperContainer}>
-                <TouchableOpacity
-                  style={styles.stepperBtn}
-                  onPress={() => handleAdjustEditQty(-1)}
-                  activeOpacity={0.7}
-                >
-                  <Ionicons name="remove" size={22} color="#D4AF37" />
-                </TouchableOpacity>
-
-                <TextInput
-                  style={styles.stepperInput}
-                  value={editItemQty}
-                  onChangeText={setEditItemQty}
-                  keyboardType="numeric"
-                  placeholder="1.0"
-                  placeholderTextColor="#6e6e7c"
-                  selectTextOnFocus
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={{ paddingBottom: 6 }}
+            >
+              {/* Product / Item Selector Section */}
+              <View style={styles.editProductSection}>
+                <InputField
+                  label="Product / Item Name"
+                  placeholder="Search or enter product name"
+                  value={editProductSearchQuery}
+                  onChangeText={(text) => {
+                    setEditProductSearchQuery(text);
+                    setEditItemName(text);
+                    setShowEditProductDropdown(true);
+                  }}
+                  onFocus={() => setShowEditProductDropdown(true)}
+                  iconName="search-outline"
+                  showClearButton={true}
+                  onClear={() => {
+                    setEditProductSearchQuery('');
+                    setShowEditProductDropdown(true);
+                  }}
+                  containerStyle={{ marginVertical: 0 }}
                 />
 
+                {/* Selected Product Details Badge */}
+                {selectedEditProduct && (
+                  <View style={styles.selectedEditProdBadge}>
+                    <Ionicons name="cube" size={15} color="#D4AF37" />
+                    <View style={{ flex: 1, marginLeft: 8 }}>
+                      <Text style={styles.selectedEditProdName} numberOfLines={1}>
+                        {selectedEditProduct.name}
+                      </Text>
+                      <Text style={styles.selectedEditProdMeta}>
+                        Default: ₹{selectedEditProduct.price}/kg • GST: {selectedEditProduct.gstRate}% • Store Stock: {selectedEditProduct.stockQty} kg
+                      </Text>
+                    </View>
+                  </View>
+                )}
+
+                {/* Dropdown for products in modal */}
+                {showEditProductDropdown && (
+                  <View style={styles.editDropdownList}>
+                    <ScrollView
+                      style={{ maxHeight: 180 }}
+                      nestedScrollEnabled={true}
+                      keyboardShouldPersistTaps="handled"
+                    >
+                      {(() => {
+                        const filtered = products.filter(
+                          (p) =>
+                            !editProductSearchQuery.trim() ||
+                            p.name.toLowerCase().includes(editProductSearchQuery.toLowerCase())
+                        );
+
+                        if (filtered.length === 0) {
+                          return (
+                            <TouchableOpacity
+                              style={styles.dropdownItem}
+                              onPress={() => {
+                                setSelectedEditProduct(null);
+                                setEditItemProductId(undefined);
+                                setEditItemName(editProductSearchQuery);
+                                setShowEditProductDropdown(false);
+                              }}
+                            >
+                              <Text style={styles.dropdownItemText}>
+                                Use custom item &quot;{editProductSearchQuery}&quot;
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        }
+
+                        return (
+                          <>
+                            {filtered.map((p) => {
+                              const isAlreadyInBill = items.some(
+                                (it) =>
+                                  it.id !== editingItem?.id &&
+                                  ((it.productId && String(it.productId) === String(p.id)) ||
+                                    it.name.replace(/\(.*?\)/g, '').trim().toLowerCase() ===
+                                      p.name.replace(/\(.*?\)/g, '').trim().toLowerCase())
+                              );
+                              const isSelected = selectedEditProduct?.id === p.id;
+                              const originalBillQty = editingBillId
+                                ? originalBillItems
+                                    .filter(
+                                      (it) =>
+                                        (it.productId && String(it.productId) === String(p.id)) ||
+                                        it.name.replace(/\(.*?\)/g, '').trim().toLowerCase() ===
+                                          p.name.replace(/\(.*?\)/g, '').trim().toLowerCase()
+                                    )
+                                    .reduce((sum, it) => sum + it.qty, 0)
+                                : 0;
+                              const effectiveStock = p.stockQty + originalBillQty;
+                              const isOutOfStock = effectiveStock <= 0;
+                              const parsed = parseItemNameAndHsn(p.name);
+
+                              return (
+                                <TouchableOpacity
+                                  key={p.id}
+                                  style={[
+                                    styles.dropdownItem,
+                                    isSelected && styles.editDropdownItemSelected,
+                                    isAlreadyInBill && styles.dropdownItemAlreadyAdded,
+                                  ]}
+                                  onPress={() => handleSelectEditProduct(p)}
+                                  disabled={isOutOfStock && !isSelected}
+                                  activeOpacity={0.7}
+                                >
+                                  <View style={{ flex: 1, marginRight: 8 }}>
+                                    <Text
+                                      style={[
+                                        styles.dropdownItemText,
+                                        isOutOfStock && !isSelected && { opacity: 0.5 },
+                                      ]}
+                                    >
+                                      {parsed.name} {parsed.hsn ? `(HSN: ${parsed.hsn})` : ''}
+                                    </Text>
+                                    {isAlreadyInBill ? (
+                                      <View style={styles.dropdownItemAlreadyAddedBadge}>
+                                        <Ionicons
+                                          name="alert-circle"
+                                          size={12}
+                                          color="#D4AF37"
+                                          style={{ marginRight: 3 }}
+                                        />
+                                        <Text style={styles.dropdownItemAlreadyAddedText}>
+                                          Already in invoice (different row)
+                                        </Text>
+                                      </View>
+                                    ) : isOutOfStock ? (
+                                      <Text style={styles.dropdownItemOutOfStock}>Out of Stock</Text>
+                                    ) : (
+                                      <Text style={styles.dropdownItemStock}>Stock: {p.stockQty} kg</Text>
+                                    )}
+                                  </View>
+                                  <View style={{ alignItems: 'flex-end' }}>
+                                    <Text
+                                      style={[
+                                        styles.dropdownItemPrice,
+                                        isSelected && { color: '#D4AF37' },
+                                      ]}
+                                    >
+                                      {formatCurrency(p.price)}
+                                    </Text>
+                                    {isSelected && (
+                                      <Ionicons
+                                        name="checkmark-circle"
+                                        size={15}
+                                        color="#D4AF37"
+                                        style={{ marginTop: 2 }}
+                                      />
+                                    )}
+                                  </View>
+                                </TouchableOpacity>
+                              );
+                            })}
+                            {editProductSearchQuery.trim().length > 0 &&
+                              !filtered.some(
+                                (p) => p.name.toLowerCase() === editProductSearchQuery.trim().toLowerCase()
+                              ) && (
+                                <TouchableOpacity
+                                  style={styles.dropdownItem}
+                                  onPress={() => {
+                                    setSelectedEditProduct(null);
+                                    setEditItemProductId(undefined);
+                                    setEditItemName(editProductSearchQuery);
+                                    setShowEditProductDropdown(false);
+                                  }}
+                                >
+                                  <Text style={styles.dropdownItemText}>
+                                    Use custom item &quot;{editProductSearchQuery}&quot;
+                                  </Text>
+                                </TouchableOpacity>
+                              )}
+                          </>
+                        );
+                      })()}
+                    </ScrollView>
+                  </View>
+                )}
+              </View>
+
+              {/* Stock breakdown calculation card */}
+              {(() => {
+                const modalStock = getEditModalStockInfo();
+                if (!modalStock || !modalStock.matchedProd) return null;
+
+                return (
+                  <View style={styles.stockBreakdownContainer}>
+                    <View style={styles.stockBreakdownRow}>
+                      <View style={styles.stockBreakdownBox}>
+                        <Text style={styles.stockBreakdownLabel}>In This Bill</Text>
+                        <Text style={styles.stockBreakdownValue}>{modalStock.currentBillItemQty} kg</Text>
+                      </View>
+                      <Text style={styles.stockBreakdownSign}>+</Text>
+                      <View style={styles.stockBreakdownBox}>
+                        <Text style={styles.stockBreakdownLabel}>Store Stock</Text>
+                        <Text
+                          style={[
+                            styles.stockBreakdownValue,
+                            modalStock.remainingStoreStock <= 0 && { color: '#FF4B4B' },
+                          ]}
+                        >
+                          {modalStock.remainingStoreStock} kg
+                        </Text>
+                      </View>
+                      <Text style={styles.stockBreakdownSign}>=</Text>
+                      <View style={[styles.stockBreakdownBox, styles.stockBreakdownBoxTotal]}>
+                        <Text style={styles.stockBreakdownLabelTotal}>Max Allowed</Text>
+                        <Text style={styles.stockBreakdownValueTotal}>{modalStock.maxAllowed} kg</Text>
+                      </View>
+                    </View>
+                  </View>
+                );
+              })()}
+
+              {/* Quantity Stepper & Direct Input */}
+              <View style={styles.editFieldSection}>
+                <Text style={styles.editFieldLabel}>Quantity (kg)</Text>
+                <View style={styles.stepperContainer}>
+                  <TouchableOpacity
+                    style={styles.stepperBtn}
+                    onPress={() => handleAdjustEditQty(-1)}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons name="remove" size={22} color="#D4AF37" />
+                  </TouchableOpacity>
+
+                  <TextInput
+                    style={styles.stepperInput}
+                    value={editItemQty}
+                    onChangeText={setEditItemQty}
+                    keyboardType="numeric"
+                    placeholder="1.0"
+                    placeholderTextColor="#6e6e7c"
+                    selectTextOnFocus
+                  />
+
+                  <TouchableOpacity
+                    style={styles.stepperBtn}
+                    onPress={() => handleAdjustEditQty(1)}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons name="add" size={22} color="#D4AF37" />
+                  </TouchableOpacity>
+                </View>
+
+                {/* Quick Stepper Presets */}
+                <View style={styles.quickQtyRow}>
+                  {[1, 2, 3, 4, 5, 10, 25, 50].map((preset) => {
+                    const modalStock = getEditModalStockInfo();
+                    const maxAllowed = modalStock?.matchedProd ? modalStock.maxAllowed : 9999;
+                    const isExceedingStock = preset > maxAllowed;
+
+                    return (
+                      <TouchableOpacity
+                        key={preset}
+                        disabled={Boolean(isExceedingStock)}
+                        style={[
+                          styles.quickQtyChip,
+                          parseFloat(editItemQty) === preset && styles.quickQtyChipActive,
+                          isExceedingStock && {
+                            opacity: 0.25,
+                            borderColor: 'rgba(255, 255, 255, 0.05)',
+                          },
+                        ]}
+                        onPress={() => setEditItemQty(String(preset))}
+                      >
+                        <Text
+                          style={[
+                            styles.quickQtyChipText,
+                            parseFloat(editItemQty) === preset && styles.quickQtyChipTextActive,
+                            isExceedingStock && { color: '#6e6e7c' },
+                          ]}
+                        >
+                          {preset} kg
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+
+              {/* Price Input */}
+              <View style={styles.editFieldSection}>
+                <Text style={styles.editFieldLabel}>Unit Price (₹ per kg)</Text>
+                <TextInput
+                  style={styles.editPriceInput}
+                  value={editItemPrice}
+                  onChangeText={setEditItemPrice}
+                  keyboardType="numeric"
+                  placeholder="0.00"
+                  placeholderTextColor="#6e6e7c"
+                />
+              </View>
+
+              {/* Live Total Calculation Banner */}
+              <View style={styles.editTotalBanner}>
+                <Text style={styles.editTotalLabel}>Item Total</Text>
+                <Text style={styles.editTotalValue}>
+                  {formatCurrency(
+                    (parseFloat(editItemQty) || 0) * (parseFloat(editItemPrice) || 0)
+                  )}
+                </Text>
+              </View>
+
+              {/* Modal Action Buttons */}
+              <View style={styles.editModalBtnRow}>
                 <TouchableOpacity
-                  style={styles.stepperBtn}
-                  onPress={() => handleAdjustEditQty(1)}
-                  activeOpacity={0.7}
+                  style={[styles.editModalBtn, styles.editModalCancelBtn]}
+                  onPress={handleCloseEditModal}
                 >
-                  <Ionicons name="add" size={22} color="#D4AF37" />
+                  <Text style={styles.editModalCancelText}>Cancel</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.editModalBtn, styles.editModalSaveBtn]}
+                  onPress={handleSaveEditedItem}
+                >
+                  <Ionicons name="checkmark-done" size={18} color="#191820" style={{ marginRight: 6 }} />
+                  <Text style={styles.editModalSaveText}>Update Item</Text>
                 </TouchableOpacity>
               </View>
-
-              {/* Quick Stepper Presets */}
-              <View style={styles.quickQtyRow}>
-                {[1, 2, 3, 4, 5, 10, 25, 50].map((preset) => {
-                  const stockInfo = getProductStockInfo(editingItem?.productId, editItemName);
-                  const otherItemsQty = items
-                    .filter((it) => it.id !== editingItem?.id && (
-                      (it.productId && it.productId === stockInfo.matchedProd?.id) ||
-                      it.name.replace(/\(.*?\)/g, '').trim().toLowerCase() === (editItemName || '').replace(/\(.*?\)/g, '').trim().toLowerCase()
-                    ))
-                    .reduce((sum, it) => sum + it.qty, 0);
-
-                  const maxAllowed = stockInfo.matchedProd
-                    ? stockInfo.maxAllowed - otherItemsQty
-                    : 9999;
-                  const isExceedingStock = preset > maxAllowed;
-
-                  return (
-                    <TouchableOpacity
-                      key={preset}
-                      disabled={Boolean(isExceedingStock)}
-                      style={[
-                        styles.quickQtyChip,
-                        parseFloat(editItemQty) === preset && styles.quickQtyChipActive,
-                        isExceedingStock && { opacity: 0.25, borderColor: 'rgba(255, 255, 255, 0.05)' },
-                      ]}
-                      onPress={() => setEditItemQty(String(preset))}
-                    >
-                      <Text
-                        style={[
-                          styles.quickQtyChipText,
-                          parseFloat(editItemQty) === preset && styles.quickQtyChipTextActive,
-                          isExceedingStock && { color: '#6e6e7c' },
-                        ]}
-                      >
-                        {preset} kg
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            </View>
-
-            {/* Price Input */}
-            <View style={styles.editFieldSection}>
-              <Text style={styles.editFieldLabel}>Unit Price (₹ per kg)</Text>
-              <TextInput
-                style={styles.editPriceInput}
-                value={editItemPrice}
-                onChangeText={setEditItemPrice}
-                keyboardType="numeric"
-                placeholder="0.00"
-                placeholderTextColor="#6e6e7c"
-              />
-            </View>
-
-            {/* Live Total Calculation Banner */}
-            <View style={styles.editTotalBanner}>
-              <Text style={styles.editTotalLabel}>Item Total</Text>
-              <Text style={styles.editTotalValue}>
-                {formatCurrency(
-                  (parseFloat(editItemQty) || 0) * (parseFloat(editItemPrice) || 0)
-                )}
-              </Text>
-            </View>
-
-            {/* Modal Action Buttons */}
-            <View style={styles.editModalBtnRow}>
-              <TouchableOpacity
-                style={[styles.editModalBtn, styles.editModalCancelBtn]}
-                onPress={() => setEditingItemModalVisible(false)}
-              >
-                <Text style={styles.editModalCancelText}>Cancel</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.editModalBtn, styles.editModalSaveBtn]}
-                onPress={handleSaveEditedItem}
-              >
-                <Ionicons name="checkmark-done" size={18} color="#191820" style={{ marginRight: 6 }} />
-                <Text style={styles.editModalSaveText}>Update Item</Text>
-              </TouchableOpacity>
-            </View>
+            </ScrollView>
           </GlassCard>
         </KeyboardAvoidingView>
       </Modal>
@@ -2373,8 +2719,54 @@ const styles = StyleSheet.create({
   // Edit Item Modal Styles
   editItemModalCard: {
     width: '100%',
-    maxWidth: 400,
+    maxWidth: 420,
+    maxHeight: '90%',
     padding: 20,
+  },
+  editProductSection: {
+    marginBottom: 14,
+  },
+  editDropdownList: {
+    backgroundColor: '#24242a',
+    borderWidth: 1.5,
+    borderColor: '#D4AF37',
+    borderRadius: 12,
+    marginTop: 6,
+    marginBottom: 10,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  editDropdownItemSelected: {
+    backgroundColor: 'rgba(212, 175, 55, 0.15)',
+    borderLeftWidth: 3,
+    borderLeftColor: '#D4AF37',
+  },
+  selectedEditProdBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(212, 175, 55, 0.1)',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginTop: 6,
+    marginBottom: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(212, 175, 55, 0.3)',
+  },
+  selectedEditProdName: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  selectedEditProdMeta: {
+    color: '#D4AF37',
+    fontSize: 11,
+    fontWeight: '600',
+    marginTop: 2,
   },
   editItemModalHeader: {
     flexDirection: 'row',

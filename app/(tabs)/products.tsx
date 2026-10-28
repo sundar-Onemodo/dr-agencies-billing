@@ -138,6 +138,7 @@ export default function ProductsScreen() {
       setStockLogs(logsWithBal.reverse());
     } catch (err: any) {
       console.error('Error fetching stock history:', err);
+      setStockLogs([]);
     } finally {
       setLoadingStockLogs(false);
     }

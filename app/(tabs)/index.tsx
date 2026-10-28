@@ -95,6 +95,11 @@ export default function DashboardScreen() {
   const handleQuickAction = (action: 'create-bill' | 'products' | 'reports' | 'settings' | 'payments' | 'customers') => {
     if (action === 'customers') {
       router.push('/customers');
+    } else if (action === 'create-bill') {
+      router.push({
+        pathname: '/(tabs)/create-bill',
+        params: { editBillId: '' },
+      });
     } else {
       router.push(`/(tabs)/${action}`);
     }
@@ -403,7 +408,10 @@ export default function DashboardScreen() {
                 activeOpacity={0.7}
                 onPress={() => {
                   setDrawerVisible(false);
-                  router.push('/(tabs)/create-bill');
+                  router.push({
+                    pathname: '/(tabs)/create-bill',
+                    params: { editBillId: '' },
+                  });
                 }}
               >
                 <View style={[styles.drawerMenuIcon, { backgroundColor: 'rgba(212, 175, 55, 0.1)' }]}>

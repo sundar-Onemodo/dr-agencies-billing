@@ -48,6 +48,11 @@ export default function TabLayout() {
             <Ionicons size={22} name={focused ? 'receipt' : 'receipt-outline'} color={color} />
           ),
         }}
+        listeners={({ navigation }) => ({
+          tabPress: () => {
+            navigation.setParams({ editBillId: '' });
+          },
+        })}
       />
       <Tabs.Screen
         name="payments"

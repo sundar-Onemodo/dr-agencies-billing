@@ -1,8 +1,6 @@
 import { GlassCard } from '@/components/ui/GlassCard';
 import { GoldButton } from '@/components/ui/GoldButton';
 import { InputField } from '@/components/ui/InputField';
-import { useAlert } from '@/context/AlertContext';
-import { useBilling } from '@/context/BillingContext';
 import {
   AppEnvironment,
   LIVE_API_URL,
@@ -11,6 +9,8 @@ import {
   loadStoredEnvironment,
   setAppEnvironment,
 } from '@/constants/Api';
+import { useAlert } from '@/context/AlertContext';
+import { useBilling } from '@/context/BillingContext';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
@@ -33,8 +33,10 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
-  
+
   // Environment State (LIVE vs TEST)
+  // Live - [EMAIL_ADDRESS] / Yuvi12
+  // Test - [EMAIL_ADDRESS] / Test@123
   const [environment, setEnvironment] = useState<AppEnvironment>(getCurrentEnvironment());
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
@@ -243,7 +245,7 @@ export default function LoginScreen() {
 
           <InputField
             label="Email or Mobile Number"
-            placeholder="e.g. sales@dragencies.com or 9876543210"
+            placeholder="e.g. sales@dragencies.com"
             value={email}
             onChangeText={(text) => {
               setEmail(text);

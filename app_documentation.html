@@ -1,0 +1,919 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>D R AGENCIES - Complete Application Documentation</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600;700&display=swap');
+
+    @page {
+      size: A4;
+      margin: 16mm 14mm 16mm 14mm;
+      @bottom-right {
+        content: counter(page);
+        font-family: 'Inter', sans-serif;
+        font-size: 9pt;
+        color: #718096;
+      }
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      color: #1a202c;
+      background: #ffffff;
+      line-height: 1.55;
+      font-size: 10pt;
+    }
+
+    .cover-page {
+      padding: 40px 20px 20px 20px;
+      page-break-after: always;
+      display: flex;
+      flex-direction: column;
+      justifyContent: space-between;
+      min-height: 90vh;
+    }
+
+    .cover-header {
+      border-bottom: 3px solid #D4AF37;
+      padding-bottom: 24px;
+    }
+
+    .brand-badge {
+      display: inline-block;
+      background: #191820;
+      color: #D4AF37;
+      font-weight: 800;
+      font-size: 11pt;
+      padding: 6px 14px;
+      border-radius: 6px;
+      letter-spacing: 2px;
+      margin-bottom: 16px;
+    }
+
+    .cover-title {
+      font-size: 26pt;
+      font-weight: 900;
+      color: #0f172a;
+      line-height: 1.2;
+      margin-bottom: 8px;
+    }
+
+    .cover-subtitle {
+      font-size: 13pt;
+      color: #475569;
+      font-weight: 500;
+      margin-bottom: 24px;
+    }
+
+    .cover-meta-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 16px;
+      margin: 24px 0;
+    }
+
+    .meta-item {
+      font-size: 9.5pt;
+    }
+
+    .meta-label {
+      color: #64748b;
+      font-weight: 600;
+      text-transform: uppercase;
+      font-size: 7.5pt;
+      letter-spacing: 1px;
+    }
+
+    .meta-value {
+      color: #0f172a;
+      font-weight: 700;
+      margin-top: 2px;
+    }
+
+    .toc {
+      background: #fafaf9;
+      border: 1px solid #e7e5e4;
+      border-radius: 8px;
+      padding: 20px;
+      margin: 20px 0;
+    }
+
+    .toc-title {
+      font-size: 12pt;
+      font-weight: 800;
+      color: #1c1917;
+      margin-bottom: 12px;
+      border-bottom: 1.5px solid #D4AF37;
+      padding-bottom: 6px;
+    }
+
+    .toc-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px 24px;
+      font-size: 9pt;
+    }
+
+    .toc-item {
+      display: flex;
+      justify-content: space-between;
+      color: #334155;
+      font-weight: 600;
+    }
+
+    .toc-num {
+      color: #D4AF37;
+      font-weight: 800;
+      margin-right: 6px;
+    }
+
+    .page {
+      page-break-after: always;
+      padding-top: 10px;
+    }
+
+    .page:last-child {
+      page-break-after: avoid;
+    }
+
+    h1 {
+      font-size: 16pt;
+      font-weight: 800;
+      color: #0f172a;
+      border-bottom: 2px solid #D4AF37;
+      padding-bottom: 6px;
+      margin-top: 18px;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    h2 {
+      font-size: 12pt;
+      font-weight: 700;
+      color: #1e293b;
+      margin-top: 14px;
+      margin-bottom: 8px;
+      border-left: 3.5px solid #D4AF37;
+      padding-left: 8px;
+    }
+
+    h3 {
+      font-size: 10.5pt;
+      font-weight: 700;
+      color: #334155;
+      margin-top: 10px;
+      margin-bottom: 4px;
+    }
+
+    p {
+      margin-bottom: 8px;
+      color: #334155;
+      text-align: justify;
+    }
+
+    ul, ol {
+      margin-left: 20px;
+      margin-bottom: 10px;
+      color: #334155;
+    }
+
+    li {
+      margin-bottom: 4px;
+    }
+
+    .badge {
+      display: inline-block;
+      font-size: 7.5pt;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .badge-gold {
+      background: #fef9c3;
+      color: #854d0e;
+      border: 1px solid #fde047;
+    }
+
+    .badge-green {
+      background: #dcfce7;
+      color: #166534;
+      border: 1px solid #86efac;
+    }
+
+    .badge-blue {
+      background: #e0f2fe;
+      color: #075985;
+      border: 1px solid #7dd3fc;
+    }
+
+    .badge-purple {
+      background: #f3e8ff;
+      color: #6b21a8;
+      border: 1px solid #d8b4fe;
+    }
+
+    .card {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      padding: 12px;
+      margin: 10px 0;
+    }
+
+    .card-gold {
+      background: #fffdf5;
+      border: 1px solid #fef08a;
+      border-left: 4px solid #D4AF37;
+    }
+
+    .card-title {
+      font-size: 9.5pt;
+      font-weight: 700;
+      color: #0f172a;
+      margin-bottom: 4px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 10px 0 14px 0;
+      font-size: 8.5pt;
+    }
+
+    th {
+      background: #0f172a;
+      color: #ffffff;
+      font-weight: 700;
+      text-align: left;
+      padding: 7px 10px;
+      border: 1px solid #0f172a;
+    }
+
+    td {
+      padding: 6px 10px;
+      border: 1px solid #e2e8f0;
+      color: #334155;
+    }
+
+    tr:nth-child(even) td {
+      background: #f8fafc;
+    }
+
+    code {
+      font-family: 'JetBrains Mono', Consolas, monospace;
+      background: #f1f5f9;
+      color: #0f172a;
+      padding: 1px 4px;
+      border-radius: 3px;
+      font-size: 8pt;
+      border: 1px solid #e2e8f0;
+    }
+
+    pre {
+      font-family: 'JetBrains Mono', Consolas, monospace;
+      background: #0f172a;
+      color: #f8fafc;
+      padding: 10px;
+      border-radius: 6px;
+      font-size: 8pt;
+      overflow-x: auto;
+      margin: 8px 0 12px 0;
+      line-height: 1.4;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin: 8px 0;
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 10px;
+      margin: 8px 0;
+    }
+
+    .formula-box {
+      background: #191820;
+      color: #ffffff;
+      border-radius: 8px;
+      padding: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-around;
+      margin: 10px 0;
+      border: 1.5px solid #D4AF37;
+    }
+
+    .formula-unit {
+      text-align: center;
+    }
+
+    .formula-label {
+      font-size: 7pt;
+      color: #94a3b8;
+      text-transform: uppercase;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+
+    .formula-val {
+      font-size: 11pt;
+      font-weight: 800;
+      color: #ffffff;
+      margin-top: 2px;
+    }
+
+    .formula-val.gold {
+      color: #D4AF37;
+    }
+
+    .formula-operator {
+      font-size: 14pt;
+      font-weight: 800;
+      color: #D4AF37;
+    }
+
+    .workflow-step {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 8px;
+      align-items: flex-start;
+    }
+
+    .step-number {
+      background: #D4AF37;
+      color: #191820;
+      font-weight: 900;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 8.5pt;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+
+    .step-content {
+      flex: 1;
+    }
+
+    .step-title {
+      font-weight: 700;
+      color: #0f172a;
+      font-size: 9.5pt;
+    }
+
+    .step-desc {
+      font-size: 8.5pt;
+      color: #475569;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ==================== COVER PAGE ==================== -->
+  <div class="cover-page">
+    <div class="cover-header">
+      <div class="brand-badge">ENTERPRISE SYSTEM DOCUMENTATION</div>
+      <h1 class="cover-title" style="border:none; margin:0; padding:0;">D R AGENCIES</h1>
+      <div class="cover-subtitle">GST Billing, Real-Time Inventory & Customer Ledger Management Portal</div>
+      <p style="font-size: 10pt; color: #64748b;">
+        Comprehensive Technical & Functional Architecture Manual detailing all application modules, authentication workflows, inventory stock algorithms, Bluetooth thermal printing, and backend microservices.
+      </p>
+    </div>
+
+    <div class="cover-meta-grid">
+      <div class="meta-item">
+        <div class="meta-label">Application Version</div>
+        <div class="meta-value">v1.0.0 (Production Stable)</div>
+      </div>
+      <div class="meta-item">
+        <div class="meta-label">Mobile Framework</div>
+        <div class="meta-value">React Native 0.79 / Expo SDK 53</div>
+      </div>
+      <div class="meta-item">
+        <div class="meta-label">Backend Platform</div>
+        <div class="meta-value">Node.js Express / Supabase PostgreSQL</div>
+      </div>
+      <div class="meta-item">
+        <div class="meta-label">Hardware Integration</div>
+        <div class="meta-value">Bluetooth ESC/POS Thermal (58mm/80mm) & A4 Print</div>
+      </div>
+      <div class="meta-item">
+        <div class="meta-label">Release Date</div>
+        <div class="meta-value">September 2026</div>
+      </div>
+      <div class="meta-item">
+        <div class="meta-label">Target Environment</div>
+        <div class="meta-value">Android (APK / AAB) & iOS</div>
+      </div>
+    </div>
+
+    <div class="toc">
+      <div class="toc-title">TABLE OF CONTENTS</div>
+      <div class="toc-grid">
+        <div class="toc-item"><span><span class="toc-num">01.</span> Executive Summary & Architecture</span> <span>Pg 2</span></div>
+        <div class="toc-item"><span><span class="toc-num">02.</span> Authentication & User Session Flow</span> <span>Pg 2</span></div>
+        <div class="toc-item"><span><span class="toc-num">03.</span> Dashboard & Operation Hub</span> <span>Pg 3</span></div>
+        <div class="toc-item"><span><span class="toc-num">04.</span> Quick Bill & Invoice Creation Flow</span> <span>Pg 3</span></div>
+        <div class="toc-item"><span><span class="toc-num">05.</span> Inventory Math & Combined Stock Algorithm</span> <span>Pg 4</span></div>
+        <div class="toc-item"><span><span class="toc-num">06.</span> Duplicate Line Item Prevention System</span> <span>Pg 4</span></div>
+        <div class="toc-item"><span><span class="toc-num">07.</span> Invoice Editing & Atomic Stock Deltas</span> <span>Pg 5</span></div>
+        <div class="toc-item"><span><span class="toc-num">08.</span> Product Inventory & Stock Movements</span> <span>Pg 5</span></div>
+        <div class="toc-item"><span><span class="toc-num">09.</span> Customer Directory & Payment Ledger</span> <span>Pg 6</span></div>
+        <div class="toc-item"><span><span class="toc-num">10.</span> Sales Analytics & Reporting Engine</span> <span>Pg 6</span></div>
+        <div class="toc-item"><span><span class="toc-num">11.</span> Printing Hardware & PDF Generation</span> <span>Pg 7</span></div>
+        <div class="toc-item"><span><span class="toc-num">12.</span> Backend API & Database Schema</span> <span>Pg 7</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== PAGE 2: ARCHITECTURE & AUTH ==================== -->
+  <div class="page">
+    <h1>1. Executive Summary & System Architecture</h1>
+    <p>
+      <strong>D R Agencies Billing App</strong> is an enterprise-grade point-of-sale, GST billing, and inventory management mobile application developed for wholesale distributors and retail agencies. It eliminates manual billing errors, automates stock deduction, tracks customer credit ledgers, and connects wirelessly with portable Bluetooth thermal receipt printers.
+    </p>
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-title">Frontend Architecture</div>
+        <ul>
+          <li><strong>Expo Router v5</strong>: File-based routing with deep-linking support.</li>
+          <li><strong>Redux Toolkit (RTK)</strong>: Centralized store management with asynchronous thunks.</li>
+          <li><strong>AsyncStorage</strong>: Local persistence for offline state and token caching.</li>
+          <li><strong>React Native Reanimated</strong>: Smooth 60fps animations and micro-interactions.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-title">Backend Architecture</div>
+        <ul>
+          <li><strong>Express.js REST API</strong>: Lightweight microservices controller layer.</li>
+          <li><strong>Supabase PostgreSQL</strong>: Scalable database with Row-Level Security (RLS).</li>
+          <li><strong>Postgres RPC</strong>: Atomic server-side stored procedures for inventory operations.</li>
+          <li><strong>JWT Authentication</strong>: Stateless bearer token verification.</li>
+        </ul>
+      </div>
+    </div>
+
+    <h1>2. Authentication & User Session Flow</h1>
+    <p>
+      The authentication system ensures secure multi-tenant isolation. All inventory items, customer lists, and invoice records are bound to the authenticated user's unique <code>user_id</code>.
+    </p>
+
+    <div class="workflow-step">
+      <div class="step-number">1</div>
+      <div class="step-content">
+        <div class="step-title">Login Screen (<code>app/login.tsx</code>)</div>
+        <div class="step-desc">Supports login via registered email or 10-digit mobile number with password verification. Form validation checks email formatting and password strength in real time.</div>
+      </div>
+    </div>
+
+    <div class="workflow-step">
+      <div class="step-number">2</div>
+      <div class="step-content">
+        <div class="step-title">JWT Token Exchange & Persistence</div>
+        <div class="step-desc">Upon successful authentication, the backend issues a signed JWT token. The app saves the token into device <code>AsyncStorage</code> and initializes the global Redux auth slice.</div>
+      </div>
+    </div>
+
+    <div class="workflow-step">
+      <div class="step-number">3</div>
+      <div class="step-content">
+        <div class="step-title">Auto-Hydration & Persistent Auth Guard</div>
+        <div class="step-desc">When the app is relaunched, <code>initializeAuth()</code> validates the cached token and immediately redirects authenticated users to the main Dashboard, bypassing login.</div>
+      </div>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Endpoint</th>
+          <th>Method</th>
+          <th>Description</th>
+          <th>Payload / Auth</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>/auth/login</code></td>
+          <td><span class="badge badge-green">POST</span></td>
+          <td>Authenticates user and returns JWT + Store Profile</td>
+          <td><code>{ email, password }</code></td>
+        </tr>
+        <tr>
+          <td><code>/auth/register</code></td>
+          <td><span class="badge badge-green">POST</span></td>
+          <td>Registers new merchant business account</td>
+          <td><code>{ email, password, name, phone }</code></td>
+        </tr>
+        <tr>
+          <td><code>/auth/profile</code></td>
+          <td><span class="badge badge-blue">GET</span></td>
+          <td>Fetches business GSTIN, address & banking details</td>
+          <td><code>Bearer &lt;token&gt;</code></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ==================== PAGE 3: DASHBOARD & QUICK BILL ==================== -->
+  <div class="page">
+    <h1>3. Dashboard & Operations Hub</h1>
+    <p>
+      The Dashboard (<code>app/(tabs)/index.tsx</code>) serves as the daily operational center, rendering real-time business performance indicators, quick navigation shortcuts, and the live stream of recent invoices.
+    </p>
+
+    <div class="grid-3">
+      <div class="card card-gold">
+        <div class="card-title">Today's Sales Revenue</div>
+        <p style="font-size: 13pt; font-weight: 800; color: #D4AF37; margin: 4px 0;">₹ Live Calculated</p>
+        <div class="step-desc">Sum total of all invoices issued on current calendar date.</div>
+      </div>
+      <div class="card card-gold">
+        <div class="card-title">Invoices Billed</div>
+        <p style="font-size: 13pt; font-weight: 800; color: #0f172a; margin: 4px 0;">Live Count</p>
+        <div class="step-desc">Total count of bills generated today with status tags.</div>
+      </div>
+      <div class="card card-gold">
+        <div class="card-title">Inventory Alerts</div>
+        <p style="font-size: 13pt; font-weight: 800; color: #dc2626; margin: 4px 0;">Dynamic</p>
+        <div class="step-desc">Flags products with low stock (&lt;10 kg) or 0 kg remaining.</div>
+      </div>
+    </div>
+
+    <h3>Key Operations on Invoices in Dashboard</h3>
+    <ul>
+      <li><strong>Invoice Status Badges</strong>: Displays green <span class="badge badge-green">PAID</span> or amber <span class="badge badge-gold">PENDING</span> indicator.</li>
+      <li><strong>✏️ Edit Invoice</strong>: Opens the invoice in <code>create-bill.tsx</code> in edit mode with pre-populated customer, item quantities, and stock allocation.</li>
+      <li><strong>🖨️ Thermal Print</strong>: Directly prints an ESC/POS receipt to the connected Bluetooth printer without leaving the dashboard.</li>
+      <li><strong>📄 Download / View PDF</strong>: Generates an A4 Tax Invoice PDF with GST breakup.</li>
+      <li><strong>🗑️ Delete with Stock Rollback</strong>: Removes the invoice and automatically increments inventory stock back into the database.</li>
+    </ul>
+
+    <h1>4. Quick Bill & Invoice Creation Flow</h1>
+    <p>
+      The Quick Bill screen (<code>app/(tabs)/create-bill.tsx</code>) is engineered for high-speed counter checkout.
+    </p>
+
+    <div class="card">
+      <div class="card-title">1. Customer Information & Auto-Fill</div>
+      <p style="font-size: 8.5pt;">
+        Typing in the customer name field opens an autocomplete dropdown from the Customer Directory. Selecting a customer auto-populates address, phone, GSTIN, and State. If a new customer is typed, a <strong>"+ Save to Directory"</strong> button appears to persist their details with a single tap.
+      </p>
+    </div>
+
+    <div class="card">
+      <div class="card-title">2. Product Entry & Live Stock Badge</div>
+      <p style="font-size: 8.5pt;">
+        Searching a product dynamically displays its current store stock. When selected, the unit price is filled automatically. The quantity input supports decimal numbers (e.g. <code>2.5 kg</code>) for weight-based sales.
+      </p>
+    </div>
+
+    <div class="card">
+      <div class="card-title">3. Dynamic GST & Payment Configurations</div>
+      <p style="font-size: 8.5pt;">
+        The GST toggle automatically computes CGST (50%) and SGST (50%) according to each product's configured tax rate (0%, 5%, 12%, 18%, 28%). Grand totals are rounded off cleanly. Payment status can be toggled to <strong>Paid</strong> with method selection (<strong>Cash, GPay, PhonePe, Paytm</strong>).
+      </p>
+    </div>
+  </div>
+
+  <!-- ==================== PAGE 4: STOCK MATH & DUPLICATE PREVENTION ==================== -->
+  <div class="page">
+    <h1>5. Combined Stock Allocation Algorithm</h1>
+    <p>
+      In a dynamic retail environment, editing an existing invoice requires a specialized mathematical formula. The system must account for stock that was already allocated to the current bill plus remaining stock in the physical store.
+    </p>
+
+    <div class="formula-box">
+      <div class="formula-unit">
+        <div class="formula-label">In This Bill</div>
+        <div class="formula-val">1.0 kg</div>
+      </div>
+      <div class="formula-operator">+</div>
+      <div class="formula-unit">
+        <div class="formula-label">Store Stock</div>
+        <div class="formula-val">4.0 kg</div>
+      </div>
+      <div class="formula-operator">=</div>
+      <div class="formula-unit">
+        <div class="formula-label">Max Allowed</div>
+        <div class="formula-val gold">5.0 kg</div>
+      </div>
+    </div>
+
+    <h3>Mathematical Formulation</h3>
+    <pre>
+TotalStockPool      = DB_Stock_Qty + Original_Billed_Qty
+RemainingStoreStock = MAX(0, TotalStockPool - Current_Active_Bill_Qty)
+MaxAllowedForItem   = TotalStockPool - Other_Items_In_Bill_Qty
+    </pre>
+
+    <div class="card card-gold">
+      <div class="card-title">Concrete Scenario Walkthrough</div>
+      <ol style="margin-left: 16px; font-size: 8.5pt;">
+        <li><strong>Initial State</strong>: Product A has <strong>5 kg</strong> in store inventory.</li>
+        <li><strong>First Bill Created</strong>: Customer purchases <strong>1 kg</strong>. Backend deducts 1 kg; DB stock becomes <strong>4 kg</strong>.</li>
+        <li><strong>Invoice Edit Session Opened</strong>: The bill loads with 1 kg. Total available pool is <code>4 kg + 1 kg = 5 kg</code>.</li>
+        <li><strong>User Increments to 3 kg</strong>: Stepper allows increment up to 5 kg. <code>3 kg &lt;= 5 kg</code> is valid.</li>
+        <li><strong>Save & Sync</strong>: Backend restores 1 kg (DB=5 kg), validates 3 kg &lt;= 5 kg, deducts 3 kg. Remaining DB stock becomes <strong>2 kg</strong>!</li>
+      </ol>
+    </div>
+
+    <h1>6. Duplicate Line Item Prevention System</h1>
+    <p>
+      Allowing duplicate rows for the same product in a single bill creates quantity calculation mismatches and invoice ambiguity. A multi-layered protection mechanism is active in <code>create-bill.tsx</code>:
+    </p>
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-title">1. Visual Dropdown Highlighting</div>
+        <p style="font-size: 8.5pt;">
+          Products already present in the active bill appear in the search dropdown with a distinctive gold highlight and a badge:
+          <code>✓ Added in invoice (X kg) • Tap to edit below</code>.
+        </p>
+      </div>
+      <div class="card">
+        <div class="card-title">2. Interception & Guidance Modal</div>
+        <p style="font-size: 8.5pt;">
+          If the user attempts to select or click "+ Add Item" for an already added product, the system intercepts the action and displays an informative alert:
+          <em>"Product is already in this invoice. Please edit its quantity from the Items List below."</em>
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== PAGE 5: INVOICE EDIT & PRODUCT MANAGEMENT ==================== -->
+  <div class="page">
+    <h1>7. Invoice Editing & Atomic Stock Deltas</h1>
+    <p>
+      The invoice update workflow utilizes database-level transactions to ensure stock counts are never corrupted or over-deducted during multi-user edits.
+    </p>
+
+    <div class="workflow-step">
+      <div class="step-number">1</div>
+      <div class="step-content">
+        <div class="step-title">Restore Previous Stock (Reversion)</div>
+        <div class="step-desc">The backend controller fetches the previous line items of the invoice and calls <code>decrement_product_stock(p_id, -old_qty)</code> to restore inventory temporarily.</div>
+      </div>
+    </div>
+
+    <div class="workflow-step">
+      <div class="step-number">2</div>
+      <div class="step-content">
+        <div class="step-title">Aggregate Validation</div>
+        <div class="step-desc">The system sums total requested quantities per product ID and validates against the newly restored store stock. If requested quantity exceeds stock, the operation rolls back and returns a 400 error.</div>
+      </div>
+    </div>
+
+    <div class="workflow-step">
+      <div class="step-number">3</div>
+      <div class="step-content">
+        <div class="step-title">Deduct New Stock & Replace Line Items</div>
+        <div class="step-desc">The backend deducts the new quantities atomically, replaces the rows in <code>bill_items</code>, updates bill totals, and records stock movement logs with reference <code>UPDATE-BILL-&lt;inv_no&gt;</code>.</div>
+      </div>
+    </div>
+
+    <h1>8. Product Inventory & Stock Movements</h1>
+    <p>
+      The Products module (<code>app/(tabs)/products.tsx</code>) manages the central inventory catalog, stock-in entries, and audit logs.
+    </p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Field</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>name</code></td>
+          <td>Text</td>
+          <td>Product title (e.g., "Hot & Spicy Masala 100g")</td>
+        </tr>
+        <tr>
+          <td><code>hsn</code></td>
+          <td>String</td>
+          <td>Harmonized System of Nomenclature code for tax classification</td>
+        </tr>
+        <tr>
+          <td><code>price</code></td>
+          <td>Decimal</td>
+          <td>Default selling unit price (₹ per kg / packet)</td>
+        </tr>
+        <tr>
+          <td><code>gstRate</code></td>
+          <td>Integer</td>
+          <td>Applicable GST percentage (0%, 5%, 12%, 18%, 28%)</td>
+        </tr>
+        <tr>
+          <td><code>stock_qty</code></td>
+          <td>Decimal</td>
+          <td>Live available stock on hand in kilograms / units</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="card">
+      <div class="card-title">Stock In / Stock Out History Modal</div>
+      <p style="font-size: 8.5pt;">
+        Tapping any product opens the Stock Ledger Modal where store managers can add incoming stock batches with purchase reference notes. Every adjustment creates a timestamped row in <code>product_stock_logs</code> marked as <strong>IN</strong> (purchase/restock) or <strong>OUT</strong> (invoiced sale).
+      </p>
+    </div>
+  </div>
+
+  <!-- ==================== PAGE 6: CUSTOMER DIRECTORY & REPORTS ==================== -->
+  <div class="page">
+    <h1>9. Customer Directory & Payment Ledger</h1>
+    <p>
+      The Customer Management system (<code>app/customers.tsx</code> & <code>app/(tabs)/payments.tsx</code>) tracks client directories, contact credentials, and credit ledgers.
+    </p>
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-title">Customer Directory</div>
+        <ul>
+          <li><strong>Quick Search</strong>: Filter by customer name or phone number.</li>
+          <li><strong>Duplicate Protection</strong>: Blocks duplicate contact numbers.</li>
+          <li><strong>GSTIN & State Tracking</strong>: Supports B2B tax compliance.</li>
+          <li><strong>Direct Dial</strong>: One-tap calling to customer phone.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-title">Customer Ledger & Balances</div>
+        <ul>
+          <li><strong>Total Billed</strong>: Cumulative sum of all invoices for the customer.</li>
+          <li><strong>Total Received</strong>: Sum of payments received from the customer.</li>
+          <li><strong>Outstanding Balance</strong>: <code>Total Billed - Total Received</code>.</li>
+          <li><strong>Payment Recording</strong>: Record Cash, GPay, PhonePe, Paytm payments.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="card card-gold">
+      <div class="card-title">Customer Statement PDF Export</div>
+      <p style="font-size: 8.5pt;">
+        The Ledger screen includes a <strong>"Download PDF Statement"</strong> feature that formats all invoices and payments for a specific customer into a formal account statement with starting balance, transaction history, and outstanding balance summary.
+      </p>
+    </div>
+
+    <h1>10. Sales Analytics & Reporting Engine</h1>
+    <p>
+      The Reports screen (<code>app/(tabs)/reports.tsx</code>) provides executive sales insights and tax compliance summaries over customizable timeframes.
+    </p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Filter Mode</th>
+          <th>Date Calculation</th>
+          <th>Primary Use Case</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Today</strong></td>
+          <td>Current calendar day (00:00 - 23:59)</td>
+          <td>End-of-day register balancing and cash reconciliation.</td>
+        </tr>
+        <tr>
+          <td><strong>Weekly</strong></td>
+          <td>Trailing 7 days</td>
+          <td>Weekly sales trends and high-demand product tracking.</td>
+        </tr>
+        <tr>
+          <td><strong>Monthly</strong></td>
+          <td>1st day of month to current date</td>
+          <td>Monthly revenue monitoring and tax filing prep.</td>
+        </tr>
+        <tr>
+          <td><strong>Custom Range</strong></td>
+          <td>Selected start and end date picker</td>
+          <td>Quarterly audits and financial year reporting.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ==================== PAGE 7: PRINTING & BACKEND API ==================== -->
+  <div class="page">
+    <h1>11. Printing Hardware & PDF Generation</h1>
+    <p>
+      The application features a hybrid printing pipeline supporting both wireless portable Bluetooth thermal printers and standard A4 office printers.
+    </p>
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-title">Bluetooth ESC/POS Thermal Printing</div>
+        <ul>
+          <li><strong>Supported Sizes</strong>: 58mm (2-inch) and 80mm (3-inch) rolls.</li>
+          <li><strong>Native ESC/POS Commands</strong>: Sends raw byte streams for bold headers, table alignment, cut commands, and barcodes.</li>
+          <li><strong>Auto-Connect</strong>: Remembers paired Bluetooth MAC addresses for instant printing.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-title">A4 Tax Invoice PDF Engine</div>
+        <ul>
+          <li><strong>Expo Print & Sharing</strong>: Compiles high-resolution HTML templates into PDF documents.</li>
+          <li><strong>Branded Header</strong>: Embeds store emblem, contact numbers, and GSTIN.</li>
+          <li><strong>Rupees in Words</strong>: Automatic conversion of numeric totals into Indian Rupees word format (Lakhs & Crores).</li>
+        </ul>
+      </div>
+    </div>
+
+    <h1>12. Backend API Reference & Supabase Database</h1>
+    <p>
+      The backend is powered by Node.js, Express, and Supabase PostgreSQL.
+    </p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Route</th>
+          <th>Method</th>
+          <th>Function</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>/bills/create</code></td>
+          <td><span class="badge badge-green">POST</span></td>
+          <td>Validates inventory, inserts bill + items, decrements stock atomically.</td>
+        </tr>
+        <tr>
+          <td><code>/bills/recent</code></td>
+          <td><span class="badge badge-blue">GET</span></td>
+          <td>Fetches the latest invoices with nested line items.</td>
+        </tr>
+        <tr>
+          <td><code>/bills/:id</code></td>
+          <td><span class="badge badge-blue">GET</span></td>
+          <td>Retrieves single invoice detail including customer & item rows.</td>
+        </tr>
+        <tr>
+          <td><code>/bills/:id</code></td>
+          <td><span class="badge badge-purple">PUT</span></td>
+          <td>Updates bill, restores old stock, validates & deducts new stock delta.</td>
+        </tr>
+        <tr>
+          <td><code>/bills/:id</code></td>
+          <td><span class="badge badge-gold">DELETE</span></td>
+          <td>Deletes bill and automatically restores product stock quantities.</td>
+        </tr>
+        <tr>
+          <td><code>/products/stock/add</code></td>
+          <td><span class="badge badge-green">POST</span></td>
+          <td>Adds restock quantity and logs entry to <code>product_stock_logs</code>.</td>
+        </tr>
+        <tr>
+          <td><code>/customers/payment</code></td>
+          <td><span class="badge badge-green">POST</span></td>
+          <td>Records customer payment and updates customer <code>total_received</code>.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="card">
+      <div class="card-title">Postgres Atomic Stock RPC Function (<code>schema.sql</code>)</div>
+      <pre>
+CREATE OR REPLACE FUNCTION decrement_product_stock(p_id BIGINT, p_qty NUMERIC, p_user_id UUID)
+RETURNS BOOLEAN AS $$
+DECLARE v_current_stock NUMERIC;
+BEGIN
+  SELECT stock_qty INTO v_current_stock FROM products WHERE id = p_id AND user_id = p_user_id FOR UPDATE;
+  IF v_current_stock IS NULL OR (p_qty > 0 AND v_current_stock < p_qty) THEN
+    RETURN FALSE;
+  END IF;
+  UPDATE products SET stock_qty = stock_qty - p_qty, updated_at = NOW() WHERE id = p_id AND user_id = p_user_id;
+  RETURN TRUE;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+      </pre>
+    </div>
+  </div>
+
+</body>
+</html>

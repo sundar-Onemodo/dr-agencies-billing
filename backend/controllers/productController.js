@@ -1,4 +1,5 @@
 const supabase = require('../config/supabase');
+const { recordStockLogs } = require('../utils/stockLogger');
 
 /**
  * Add a new product
@@ -35,17 +36,13 @@ exports.addProduct = async (req, res) => {
       return res.status(400).json({ error: error.message });
     }
 
-    try {
-      await supabase.from('product_stock_logs').insert({
-        user_id: req.user.id,
-        product_id: data.id,
-        type: 'IN',
-        quantity: parsedStock,
-        reference_id: 'INITIAL'
-      });
-    } catch (logErr) {
-      console.error('Error writing initial stock log:', logErr);
-    }
+    await recordStockLogs(supabase, {
+      user_id: req.user.id,
+      product_id: data.id,
+      type: 'IN',
+      quantity: parsedStock,
+      reference_id: 'INITIAL'
+    });
 
     return res.status(201).json({
       success: true,
@@ -183,17 +180,13 @@ exports.updateProduct = async (req, res) => {
 
     const diff = parsedStock - oldStock;
     if (diff !== 0) {
-      try {
-        await supabase.from('product_stock_logs').insert({
-          user_id: req.user.id,
-          product_id: data.id,
-          type: diff > 0 ? 'IN' : 'OUT',
-          quantity: Math.abs(diff),
-          reference_id: 'MANUAL_UPDATE'
-        });
-      } catch (logErr) {
-        console.error('Error writing update stock log:', logErr);
-      }
+      await recordStockLogs(supabase, {
+        user_id: req.user.id,
+        product_id: data.id,
+        type: diff > 0 ? 'IN' : 'OUT',
+        quantity: Math.abs(diff),
+        reference_id: 'MANUAL_UPDATE'
+      });
     }
 
     return res.status(200).json({
@@ -255,7 +248,71 @@ exports.getStockLedger = async (req, res) => {
 
     query = query.order('created_at', { ascending: false });
 
-    const { data, error } = await query;
+    let { data, error } = await query;
+
+    // Resilient fallback: if the database table uses the legacy schema (change_type, qty_changed, notes)
+    // instead of (type, quantity, reference_id), catch the missing column error and query the legacy columns
+    if (error && (error.message.includes('type') || error.message.includes('column') || error.code === '42703' || error.code === 'PGRST204')) {
+      let fallbackQuery = supabase
+        .from('product_stock_logs')
+        .select(`
+          id,
+          product_id,
+          change_type,
+          qty_changed,
+          notes,
+          bill_id,
+          created_at,
+          products (
+            name
+          )
+        `)
+        .eq('user_id', req.user.id);
+
+      if (targetProductId && targetProductId !== 'undefined' && targetProductId !== 'null') {
+        const parsedId = parseInt(targetProductId, 10);
+        if (!isNaN(parsedId)) {
+          fallbackQuery = fallbackQuery.eq('product_id', parsedId);
+        } else {
+          fallbackQuery = fallbackQuery.eq('product_id', targetProductId);
+        }
+      }
+
+      if (from && to) {
+        const fromDate = new Date(`${from}T00:00:00.000Z`).toISOString();
+        const toDate = new Date(`${to}T23:59:59.999Z`).toISOString();
+        fallbackQuery = fallbackQuery.gte('created_at', fromDate).lte('created_at', toDate);
+      }
+
+      fallbackQuery = fallbackQuery.order('created_at', { ascending: false });
+
+      const fallbackResult = await fallbackQuery;
+      if (fallbackResult.error) {
+        return res.status(400).json({ error: fallbackResult.error.message });
+      }
+
+      const formattedLogs = (fallbackResult.data || []).map(log => {
+        const qtyChanged = parseFloat(log.qty_changed || 0);
+        const isPositive = qtyChanged >= 0;
+        const calculatedType = log.change_type === 'BILL_SALE' || log.change_type === 'OUT'
+          ? 'OUT'
+          : (isPositive ? 'IN' : 'OUT');
+        return {
+          id: String(log.id),
+          productId: String(log.product_id),
+          productName: log.products ? log.products.name : 'Unknown Product',
+          type: calculatedType,
+          quantity: Math.abs(qtyChanged),
+          referenceId: log.notes || (log.bill_id ? `BILL-${log.bill_id}` : log.change_type || 'RESTOCK'),
+          createdAt: log.created_at
+        };
+      });
+
+      return res.status(200).json({
+        success: true,
+        logs: formattedLogs
+      });
+    }
 
     if (error) {
       return res.status(400).json({ error: error.message });
@@ -265,9 +322,9 @@ exports.getStockLedger = async (req, res) => {
       id: String(log.id),
       productId: String(log.product_id),
       productName: log.products ? log.products.name : 'Unknown Product',
-      type: log.type,
-      quantity: parseFloat(log.quantity),
-      referenceId: log.reference_id,
+      type: log.type || 'IN',
+      quantity: parseFloat(log.quantity || 0),
+      referenceId: log.reference_id || '',
       createdAt: log.created_at
     }));
 
@@ -321,17 +378,13 @@ exports.addStock = async (req, res) => {
       return res.status(400).json({ error: updateErr.message });
     }
 
-    try {
-      await supabase.from('product_stock_logs').insert({
-        user_id: req.user.id,
-        product_id: parseInt(id, 10),
-        type: 'IN',
-        quantity: addQty,
-        reference_id: referenceId || 'RESTOCK'
-      });
-    } catch (logErr) {
-      console.error('Error logging add stock:', logErr);
-    }
+    await recordStockLogs(supabase, {
+      user_id: req.user.id,
+      product_id: parseInt(id, 10),
+      type: 'IN',
+      quantity: addQty,
+      reference_id: referenceId || 'RESTOCK'
+    });
 
     return res.status(200).json({
       success: true,

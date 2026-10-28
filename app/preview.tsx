@@ -841,6 +841,18 @@ Thank you for doing business!
             onPress={handlePrintInvoice}
             style={styles.primaryBtn}
           />
+          <GoldButton
+            title="+ Create New Bill"
+            variant="outlined"
+            iconName="add-circle-outline"
+            onPress={() =>
+              router.push({
+                pathname: '/(tabs)/create-bill',
+                params: { editBillId: '' },
+              })
+            }
+            style={styles.secondaryBtn}
+          />
           {bill?.id && (
             <GoldButton
               title="Edit Invoice"

@@ -1,4 +1,5 @@
 const supabase = require('../config/supabase');
+const { recordStockLogs } = require('../utils/stockLogger');
 
 /**
  * Create a new bill (invoice) and its associated items
@@ -281,7 +282,7 @@ exports.createBill = async (req, res) => {
       }).filter(log => log !== null);
 
       if (logs.length > 0) {
-        await supabase.from('product_stock_logs').insert(logs);
+        await recordStockLogs(supabase, logs);
       }
     } catch (logErr) {
       console.error('Error logging stock out movements:', logErr);
@@ -557,7 +558,7 @@ exports.deleteBill = async (req, res) => {
       }).filter(log => log !== null);
 
       if (logs.length > 0) {
-        await supabase.from('product_stock_logs').insert(logs);
+        await recordStockLogs(supabase, logs);
       }
     } catch (logErr) {
       console.error('Error logging stock restore on delete:', logErr);
@@ -756,7 +757,7 @@ exports.updateBill = async (req, res) => {
       }).filter(Boolean);
 
       if (updateLogs.length > 0) {
-        await supabase.from('product_stock_logs').insert(updateLogs);
+        await recordStockLogs(supabase, updateLogs);
       }
     } catch (logErr) {
       console.error('Error logging stock updates on bill update:', logErr);

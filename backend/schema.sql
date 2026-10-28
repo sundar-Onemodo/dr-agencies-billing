@@ -40,10 +40,13 @@ CREATE TABLE IF NOT EXISTS public.product_stock_logs (
     id BIGSERIAL PRIMARY KEY,
     user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
     product_id BIGINT NOT NULL REFERENCES public.products(id) ON DELETE CASCADE,
-    change_type TEXT NOT NULL, -- 'INITIAL', 'ADD_PURCHASE', 'MANUAL_CORRECTION', 'BILL_SALE'
-    qty_changed NUMERIC(10, 2) NOT NULL,
-    previous_qty NUMERIC(10, 2) NOT NULL,
-    new_qty NUMERIC(10, 2) NOT NULL,
+    type TEXT,
+    quantity NUMERIC(10, 2),
+    reference_id TEXT,
+    change_type TEXT, -- 'INITIAL', 'ADD_PURCHASE', 'MANUAL_CORRECTION', 'BILL_SALE'
+    qty_changed NUMERIC(10, 2),
+    previous_qty NUMERIC(10, 2),
+    new_qty NUMERIC(10, 2),
     notes TEXT,
     bill_id BIGINT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
