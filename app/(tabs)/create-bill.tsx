@@ -81,6 +81,8 @@ export default function CreateBillScreen() {
   const [editingItem, setEditingItem] = useState<BillItem | null>(null);
   const [editItemQty, setEditItemQty] = useState('');
   const [editItemPrice, setEditItemPrice] = useState('');
+  const [editItemInclusivePrice, setEditItemInclusivePrice] = useState('');
+  const [editItemPriceMode, setEditItemPriceMode] = useState<'EXCLUSIVE' | 'INCLUSIVE'>('INCLUSIVE');
   const [editItemName, setEditItemName] = useState('');
   const [editItemGstRate, setEditItemGstRate] = useState(18);
   const [editItemProductId, setEditItemProductId] = useState<string | undefined>(undefined);
@@ -109,6 +111,8 @@ export default function CreateBillScreen() {
   const [showProductDropdown, setShowProductDropdown] = useState(false);
   const [qty, setQty] = useState('1');
   const [price, setPrice] = useState('');
+  const [inclusivePrice, setInclusivePrice] = useState('');
+  const [itemPriceMode, setItemPriceMode] = useState<'EXCLUSIVE' | 'INCLUSIVE'>('INCLUSIVE');
   const [saving, setSaving] = useState(false);
   
   // GST Toggle State
@@ -388,8 +392,51 @@ export default function CreateBillScreen() {
     setSelectedProduct(product);
     const parsed = parseItemNameAndHsn(product.name);
     setSearchQuery(parsed.name);
+    const gRate = product.gstRate !== undefined ? product.gstRate : 18;
     setPrice(product.price.toString());
+    const inclVal = Number((product.price * (1 + gRate / 100)).toFixed(2));
+    setInclusivePrice(inclVal.toString());
     setShowProductDropdown(false);
+  };
+
+  const handleToggleItemPriceMode = (mode: 'EXCLUSIVE' | 'INCLUSIVE') => {
+    setItemPriceMode(mode);
+    const g = selectedProduct ? selectedProduct.gstRate : 18;
+    if (mode === 'INCLUSIVE') {
+      const base = parseFloat(price);
+      if (!isNaN(base) && base > 0) {
+        setInclusivePrice(Number((base * (1 + g / 100)).toFixed(2)).toString());
+      }
+    } else {
+      const incl = parseFloat(inclusivePrice);
+      if (!isNaN(incl) && incl > 0) {
+        setPrice(Number((incl / (1 + g / 100)).toFixed(2)).toString());
+      }
+    }
+  };
+
+  const handleInclusivePriceChange = (val: string) => {
+    setInclusivePrice(val);
+    const incl = parseFloat(val);
+    const g = selectedProduct ? selectedProduct.gstRate : 18;
+    if (!isNaN(incl) && incl > 0) {
+      const calculatedBase = Number((incl / (1 + g / 100)).toFixed(2));
+      setPrice(calculatedBase.toString());
+    } else if (!val.trim()) {
+      setPrice('');
+    }
+  };
+
+  const handleBasePriceChange = (val: string) => {
+    setPrice(val);
+    const base = parseFloat(val);
+    const g = selectedProduct ? selectedProduct.gstRate : 18;
+    if (!isNaN(base) && base > 0) {
+      const calculatedIncl = Number((base * (1 + g / 100)).toFixed(2));
+      setInclusivePrice(calculatedIncl.toString());
+    } else if (!val.trim()) {
+      setInclusivePrice('');
+    }
   };
 
   const handleAddItem = () => {
@@ -398,7 +445,15 @@ export default function CreateBillScreen() {
       return;
     }
     const q = parseFloat(qty);
-    const p = parseFloat(price);
+    const gstRateVal = selectedProduct ? selectedProduct.gstRate : 18;
+
+    let p = parseFloat(price);
+    if (itemPriceMode === 'INCLUSIVE') {
+      const incl = parseFloat(inclusivePrice);
+      if (!isNaN(incl) && incl > 0) {
+        p = Number((incl / (1 + gstRateVal / 100)).toFixed(2));
+      }
+    }
 
     if (isNaN(q) || q <= 0) {
       showWarning('Invalid Quantity', 'Please enter a valid quantity greater than 0.');
@@ -429,7 +484,6 @@ export default function CreateBillScreen() {
     }
 
     const amount = q * p;
-    const gstRateVal = selectedProduct ? selectedProduct.gstRate : 18;
     const finalItemName = selectedProduct
       ? `${selectedProduct.name} (GST: ${gstRateVal}%)`
       : searchQuery.includes('GST:') ? searchQuery : `${searchQuery} (GST: 18%)`;
@@ -451,6 +505,7 @@ export default function CreateBillScreen() {
     setSearchQuery('');
     setQty('1');
     setPrice('');
+    setInclusivePrice('');
   };
 
   const handleOpenEditItem = (item: BillItem) => {
@@ -479,6 +534,9 @@ export default function CreateBillScreen() {
         ? matchedProd.gstRate
         : parseGstRateFromName(item.name);
     setEditItemGstRate(gstRateVal);
+    const inclVal = Number((item.price * (1 + gstRateVal / 100)).toFixed(2));
+    setEditItemInclusivePrice(inclVal.toString());
+    setEditItemPriceMode('INCLUSIVE');
     setShowEditProductDropdown(false);
     setEditingItemModalVisible(true);
   };
@@ -531,6 +589,8 @@ export default function CreateBillScreen() {
     setEditItemName(`${p.name} (GST: ${p.gstRate}%)`);
     setEditItemPrice(p.price.toString());
     setEditItemGstRate(p.gstRate);
+    const inclVal = Number((p.price * (1 + p.gstRate / 100)).toFixed(2));
+    setEditItemInclusivePrice(inclVal.toString());
 
     // If current entered quantity exceeds total available of the newly selected product, cap it
     const currentQ = parseFloat(editItemQty) || 0;
@@ -538,6 +598,44 @@ export default function CreateBillScreen() {
       setEditItemQty(String(Number(totalAllowed.toFixed(2))));
     }
     setShowEditProductDropdown(false);
+  };
+
+  const handleToggleEditItemPriceMode = (mode: 'EXCLUSIVE' | 'INCLUSIVE') => {
+    setEditItemPriceMode(mode);
+    const g = editItemGstRate || 18;
+    if (mode === 'INCLUSIVE') {
+      const base = parseFloat(editItemPrice);
+      if (!isNaN(base) && base > 0) {
+        setEditItemInclusivePrice(Number((base * (1 + g / 100)).toFixed(2)).toString());
+      }
+    } else {
+      const incl = parseFloat(editItemInclusivePrice);
+      if (!isNaN(incl) && incl > 0) {
+        setEditItemPrice(Number((incl / (1 + g / 100)).toFixed(2)).toString());
+      }
+    }
+  };
+
+  const handleEditInclusivePriceChange = (val: string) => {
+    setEditItemInclusivePrice(val);
+    const incl = parseFloat(val);
+    const g = editItemGstRate || 18;
+    if (!isNaN(incl) && incl > 0) {
+      setEditItemPrice(Number((incl / (1 + g / 100)).toFixed(2)).toString());
+    } else if (!val.trim()) {
+      setEditItemPrice('');
+    }
+  };
+
+  const handleEditBasePriceChange = (val: string) => {
+    setEditItemPrice(val);
+    const base = parseFloat(val);
+    const g = editItemGstRate || 18;
+    if (!isNaN(base) && base > 0) {
+      setEditItemInclusivePrice(Number((base * (1 + g / 100)).toFixed(2)).toString());
+    } else if (!val.trim()) {
+      setEditItemInclusivePrice('');
+    }
   };
 
   const getEditModalStockInfo = () => {
@@ -613,7 +711,13 @@ export default function CreateBillScreen() {
   const handleSaveEditedItem = () => {
     if (!editingItem) return;
     const q = parseFloat(editItemQty);
-    const p = parseFloat(editItemPrice);
+    let p = parseFloat(editItemPrice);
+    if (editItemPriceMode === 'INCLUSIVE') {
+      const incl = parseFloat(editItemInclusivePrice);
+      if (!isNaN(incl) && incl > 0) {
+        p = Number((incl / (1 + editItemGstRate / 100)).toFixed(2));
+      }
+    }
 
     if (isNaN(q) || q <= 0) {
       showWarning('Invalid Quantity', 'Please enter a valid quantity greater than 0.');
@@ -1468,15 +1572,54 @@ export default function CreateBillScreen() {
                               <Text style={styles.dropdownItemStock}>Stock: {remainingStock} kg</Text>
                             )}
                           </View>
-                          <Text style={[styles.dropdownItemPrice, isOutOfStock && { opacity: 0.5 }, isAlreadyInBill && { color: '#D4AF37' }]}>
-                            {formatCurrency(p.price)}
-                          </Text>
+                          <View style={{ alignItems: 'flex-end' }}>
+                            <Text style={[styles.dropdownItemPrice, isOutOfStock && { opacity: 0.5 }, isAlreadyInBill && { color: '#D4AF37' }]}>
+                              {formatCurrency(p.price * (1 + (p.gstRate || 0) / 100))}
+                            </Text>
+                            <Text style={{ color: '#8E8E9F', fontSize: 10 }}>
+                              Base: {formatCurrency(p.price)}
+                            </Text>
+                          </View>
                         </TouchableOpacity>
                       );
                     })
                   )}
                 </View>
               )}
+            </View>
+
+            {/* Rate Type Selector: Inclusive vs Exclusive */}
+            <View style={styles.rateTypeToggleRow}>
+              <TouchableOpacity
+                style={[styles.rateTypeBtn, itemPriceMode === 'INCLUSIVE' && styles.rateTypeBtnActive]}
+                onPress={() => handleToggleItemPriceMode('INCLUSIVE')}
+                activeOpacity={0.7}
+              >
+                <Ionicons
+                  name="pricetag"
+                  size={12}
+                  color={itemPriceMode === 'INCLUSIVE' ? '#191820' : '#D4AF37'}
+                  style={{ marginRight: 4 }}
+                />
+                <Text style={[styles.rateTypeBtnText, itemPriceMode === 'INCLUSIVE' && styles.rateTypeBtnTextActive]}>
+                  Incl. GST (MRP)
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.rateTypeBtn, itemPriceMode === 'EXCLUSIVE' && styles.rateTypeBtnActive]}
+                onPress={() => handleToggleItemPriceMode('EXCLUSIVE')}
+                activeOpacity={0.7}
+              >
+                <Ionicons
+                  name="receipt-outline"
+                  size={12}
+                  color={itemPriceMode === 'EXCLUSIVE' ? '#191820' : '#D4AF37'}
+                  style={{ marginRight: 4 }}
+                />
+                <Text style={[styles.rateTypeBtnText, itemPriceMode === 'EXCLUSIVE' && styles.rateTypeBtnTextActive]}>
+                  Excl. GST (Base)
+                </Text>
+              </TouchableOpacity>
             </View>
 
             {/* Qty & Price Row */}
@@ -1492,16 +1635,46 @@ export default function CreateBillScreen() {
                 />
               </View>
               <View style={{ flex: 1.5 }}>
-                <InputField
-                  label="Price (₹)"
-                  placeholder="0.00"
-                  value={price}
-                  onChangeText={setPrice}
-                  keyboardType="numeric"
-                  iconName="cash-outline"
-                />
+                {itemPriceMode === 'INCLUSIVE' ? (
+                  <InputField
+                    label="Rate (₹ Incl. GST)"
+                    placeholder="e.g. 450"
+                    value={inclusivePrice}
+                    onChangeText={handleInclusivePriceChange}
+                    keyboardType="numeric"
+                    iconName="pricetag-outline"
+                  />
+                ) : (
+                  <InputField
+                    label="Base Price (₹ Excl.)"
+                    placeholder="e.g. 428.57"
+                    value={price}
+                    onChangeText={handleBasePriceChange}
+                    keyboardType="numeric"
+                    iconName="cash-outline"
+                  />
+                )}
               </View>
             </View>
+
+            {/* Live Rate Breakdown Pill */}
+            {(parseFloat(price) > 0 || parseFloat(inclusivePrice) > 0) && (
+              <View style={styles.rateBreakdownPill}>
+                <Ionicons name="information-circle-outline" size={14} color="#D4AF37" style={{ marginRight: 4 }} />
+                <Text style={styles.rateBreakdownPillText}>
+                  Base: ₹{parseFloat(price || '0').toFixed(2)} + GST ({selectedProduct ? selectedProduct.gstRate : 18}%): ₹
+                  {(
+                    parseFloat(price || '0') *
+                    ((selectedProduct ? selectedProduct.gstRate : 18) / 100)
+                  ).toFixed(2)}{' '}
+                  = Final: ₹
+                  {(
+                    parseFloat(price || '0') *
+                    (1 + (selectedProduct ? selectedProduct.gstRate : 18) / 100)
+                  ).toFixed(2)}
+                </Text>
+              </View>
+            )}
 
             {/* Add Button */}
             <GoldButton
@@ -2056,25 +2229,87 @@ export default function CreateBillScreen() {
                 </View>
               </View>
 
-              {/* Price Input */}
+              {/* Price Input with Inclusive / Exclusive Toggle */}
               <View style={styles.editFieldSection}>
-                <Text style={styles.editFieldLabel}>Unit Price (₹ per kg)</Text>
-                <TextInput
-                  style={styles.editPriceInput}
-                  value={editItemPrice}
-                  onChangeText={setEditItemPrice}
-                  keyboardType="numeric"
-                  placeholder="0.00"
-                  placeholderTextColor="#6e6e7c"
-                />
+                <View style={styles.rateTypeToggleRow}>
+                  <TouchableOpacity
+                    style={[styles.rateTypeBtn, editItemPriceMode === 'INCLUSIVE' && styles.rateTypeBtnActive]}
+                    onPress={() => handleToggleEditItemPriceMode('INCLUSIVE')}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons
+                      name="pricetag"
+                      size={12}
+                      color={editItemPriceMode === 'INCLUSIVE' ? '#191820' : '#D4AF37'}
+                      style={{ marginRight: 4 }}
+                    />
+                    <Text style={[styles.rateTypeBtnText, editItemPriceMode === 'INCLUSIVE' && styles.rateTypeBtnTextActive]}>
+                      Incl. GST (MRP)
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.rateTypeBtn, editItemPriceMode === 'EXCLUSIVE' && styles.rateTypeBtnActive]}
+                    onPress={() => handleToggleEditItemPriceMode('EXCLUSIVE')}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons
+                      name="receipt-outline"
+                      size={12}
+                      color={editItemPriceMode === 'EXCLUSIVE' ? '#191820' : '#D4AF37'}
+                      style={{ marginRight: 4 }}
+                    />
+                    <Text style={[styles.rateTypeBtnText, editItemPriceMode === 'EXCLUSIVE' && styles.rateTypeBtnTextActive]}>
+                      Excl. GST (Base)
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                {editItemPriceMode === 'INCLUSIVE' ? (
+                  <>
+                    <Text style={styles.editFieldLabel}>Rate (₹ Incl. GST per kg)</Text>
+                    <TextInput
+                      style={styles.editPriceInput}
+                      value={editItemInclusivePrice}
+                      onChangeText={handleEditInclusivePriceChange}
+                      keyboardType="numeric"
+                      placeholder="0.00"
+                      placeholderTextColor="#6e6e7c"
+                    />
+                  </>
+                ) : (
+                  <>
+                    <Text style={styles.editFieldLabel}>Base Price (₹ Excl. GST per kg)</Text>
+                    <TextInput
+                      style={styles.editPriceInput}
+                      value={editItemPrice}
+                      onChangeText={handleEditBasePriceChange}
+                      keyboardType="numeric"
+                      placeholder="0.00"
+                      placeholderTextColor="#6e6e7c"
+                    />
+                  </>
+                )}
+
+                <Text style={{ color: '#8E8E9F', fontSize: 11, marginTop: 4 }}>
+                  Base: ₹{parseFloat(editItemPrice || '0').toFixed(2)} • GST ({editItemGstRate}%): ₹
+                  {(parseFloat(editItemPrice || '0') * (editItemGstRate / 100)).toFixed(2)} • Final: ₹
+                  {(parseFloat(editItemPrice || '0') * (1 + editItemGstRate / 100)).toFixed(2)}
+                </Text>
               </View>
 
               {/* Live Total Calculation Banner */}
               <View style={styles.editTotalBanner}>
-                <Text style={styles.editTotalLabel}>Item Total</Text>
+                <View>
+                  <Text style={styles.editTotalLabel}>Item Total</Text>
+                  <Text style={{ color: '#8E8E9F', fontSize: 10 }}>
+                    Taxable: {formatCurrency((parseFloat(editItemQty) || 0) * (parseFloat(editItemPrice) || 0))}
+                  </Text>
+                </View>
                 <Text style={styles.editTotalValue}>
                   {formatCurrency(
-                    (parseFloat(editItemQty) || 0) * (parseFloat(editItemPrice) || 0)
+                    (parseFloat(editItemQty) || 0) *
+                    (parseFloat(editItemPrice) || 0) *
+                    (1 + (editItemGstRate || 0) / 100)
                   )}
                 </Text>
               </View>
@@ -2382,6 +2617,52 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
     marginTop: 2,
+  },
+  rateTypeToggleRow: {
+    flexDirection: 'row',
+    backgroundColor: '#24242a',
+    borderRadius: 8,
+    padding: 2,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(212, 175, 55, 0.2)',
+  },
+  rateTypeBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  rateTypeBtnActive: {
+    backgroundColor: '#D4AF37',
+  },
+  rateTypeBtnText: {
+    color: '#D4AF37',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  rateTypeBtnTextActive: {
+    color: '#191820',
+    fontWeight: '800',
+  },
+  rateBreakdownPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(212, 175, 55, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(212, 175, 55, 0.2)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+    marginTop: 6,
+    marginBottom: 6,
+  },
+  rateBreakdownPillText: {
+    color: '#E0E0E6',
+    fontSize: 11,
+    fontWeight: '600',
   },
   inputRow: {
     flexDirection: 'row',

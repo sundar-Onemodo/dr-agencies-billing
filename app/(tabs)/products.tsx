@@ -69,6 +69,8 @@ export default function ProductsScreen() {
   const [name, setName] = useState('');
   const [hsn, setHsn] = useState('');
   const [price, setPrice] = useState('');
+  const [inclusivePrice, setInclusivePrice] = useState('');
+  const [priceMode, setPriceMode] = useState<'EXCLUSIVE' | 'INCLUSIVE'>('INCLUSIVE');
   const [gstRate, setGstRate] = useState('18'); // Default 18% GST
   const [stockQty, setStockQty] = useState('0');
   const [refreshing, setRefreshing] = useState(false);
@@ -194,7 +196,9 @@ export default function ProductsScreen() {
     setName('');
     setHsn('');
     setPrice('');
+    setInclusivePrice('');
     setGstRate('18');
+    setPriceMode('INCLUSIVE');
     setStockQty('0');
     setModalVisible(true);
   };
@@ -206,9 +210,54 @@ export default function ProductsScreen() {
     setName(parsed.name);
     setHsn(parsed.hsn);
     setPrice(product.price.toString());
-    setGstRate(product.gstRate.toString());
+    const gRate = product.gstRate !== undefined ? product.gstRate : 18;
+    const inclVal = Number((product.price * (1 + gRate / 100)).toFixed(2));
+    setInclusivePrice(inclVal.toString());
+    setGstRate(gRate.toString());
+    setPriceMode('INCLUSIVE');
     setStockQty(product.stockQty?.toString() || '0');
     setModalVisible(true);
+  };
+
+  // Price synchronization handlers
+  const handleInclusivePriceChange = (val: string) => {
+    setInclusivePrice(val);
+    const incl = parseFloat(val);
+    const g = parseFloat(gstRate) || 0;
+    if (!isNaN(incl) && incl > 0) {
+      const calculatedBase = Number((incl / (1 + g / 100)).toFixed(2));
+      setPrice(calculatedBase.toString());
+    } else if (!val.trim()) {
+      setPrice('');
+    }
+  };
+
+  const handleBasePriceChange = (val: string) => {
+    setPrice(val);
+    const base = parseFloat(val);
+    const g = parseFloat(gstRate) || 0;
+    if (!isNaN(base) && base > 0) {
+      const calculatedIncl = Number((base * (1 + g / 100)).toFixed(2));
+      setInclusivePrice(calculatedIncl.toString());
+    } else if (!val.trim()) {
+      setInclusivePrice('');
+    }
+  };
+
+  const handleGstRateChange = (rateVal: string) => {
+    setGstRate(rateVal);
+    const g = parseFloat(rateVal) || 0;
+    if (priceMode === 'INCLUSIVE') {
+      const incl = parseFloat(inclusivePrice);
+      if (!isNaN(incl) && incl > 0) {
+        setPrice(Number((incl / (1 + g / 100)).toFixed(2)).toString());
+      }
+    } else {
+      const base = parseFloat(price);
+      if (!isNaN(base) && base > 0) {
+        setInclusivePrice(Number((base * (1 + g / 100)).toFixed(2)).toString());
+      }
+    }
   };
 
   // Format date helper
@@ -245,9 +294,18 @@ export default function ProductsScreen() {
       showWarning('Validation Error', 'Product Name is required.');
       return;
     }
-    const p = parseFloat(price);
     const g = parseInt(gstRate, 10);
     const s = parseFloat(stockQty);
+
+    let p = parseFloat(price);
+    if (isNaN(p) || p <= 0) {
+      if (priceMode === 'INCLUSIVE') {
+        const incl = parseFloat(inclusivePrice);
+        if (!isNaN(incl) && incl > 0) {
+          p = Number((incl / (1 + (isNaN(g) ? 0 : g) / 100)).toFixed(2));
+        }
+      }
+    }
 
     if (isNaN(p) || p <= 0) {
       showWarning('Validation Error', 'Please enter a valid price greater than 0.');
@@ -413,7 +471,7 @@ export default function ProductsScreen() {
                 {/* Middle Row: Price, Tax & Stock Metrics Grid */}
                 <View style={styles.cardInfoGrid}>
                   <View style={styles.infoChip}>
-                    <Text style={styles.infoChipLabel}>UNIT PRICE</Text>
+                    <Text style={styles.infoChipLabel}>BASE (EXCL.)</Text>
                     <Text style={styles.infoChipPrice}>{formatCurrency(item.price)}</Text>
                   </View>
 
@@ -422,6 +480,15 @@ export default function ProductsScreen() {
                   <View style={styles.infoChip}>
                     <Text style={styles.infoChipLabel}>TAX RATE</Text>
                     <Text style={styles.infoChipGst}>GST {item.gstRate}%</Text>
+                  </View>
+
+                  <View style={styles.infoChipDivider} />
+
+                  <View style={styles.infoChip}>
+                    <Text style={styles.infoChipLabel}>FINAL (INCL.)</Text>
+                    <Text style={[styles.infoChipPrice, { color: '#4ADE80' }]}>
+                      {formatCurrency(item.price * (1 + (item.gstRate || 0) / 100))}
+                    </Text>
                   </View>
 
                   <View style={styles.infoChipDivider} />
@@ -504,20 +571,92 @@ export default function ProductsScreen() {
                 iconName="barcode-outline"
               />
 
-              <InputField
-                label="Base Price (₹)"
-                placeholder="e.g. 450"
-                value={price}
-                onChangeText={setPrice}
-                keyboardType="numeric"
-                iconName="cash-outline"
-              />
+              {/* Price Type Selector: Inclusive vs Exclusive */}
+              <View style={styles.priceModeSelector}>
+                <TouchableOpacity
+                  style={[styles.priceModeBtn, priceMode === 'INCLUSIVE' && styles.priceModeBtnActive]}
+                  onPress={() => setPriceMode('INCLUSIVE')}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons
+                    name="pricetag"
+                    size={13}
+                    color={priceMode === 'INCLUSIVE' ? '#191820' : '#D4AF37'}
+                    style={{ marginRight: 6 }}
+                  />
+                  <Text style={[styles.priceModeBtnText, priceMode === 'INCLUSIVE' && styles.priceModeBtnTextActive]}>
+                    Incl. GST (MRP)
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.priceModeBtn, priceMode === 'EXCLUSIVE' && styles.priceModeBtnActive]}
+                  onPress={() => setPriceMode('EXCLUSIVE')}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons
+                    name="receipt-outline"
+                    size={13}
+                    color={priceMode === 'EXCLUSIVE' ? '#191820' : '#D4AF37'}
+                    style={{ marginRight: 6 }}
+                  />
+                  <Text style={[styles.priceModeBtnText, priceMode === 'EXCLUSIVE' && styles.priceModeBtnTextActive]}>
+                    Excl. GST (Base Price)
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {priceMode === 'INCLUSIVE' ? (
+                <InputField
+                  label="Final Selling Rate (₹ Incl. GST)"
+                  placeholder="e.g. 450"
+                  value={inclusivePrice}
+                  onChangeText={handleInclusivePriceChange}
+                  keyboardType="numeric"
+                  iconName="pricetag-outline"
+                />
+              ) : (
+                <InputField
+                  label="Base Price (₹ Excl. GST)"
+                  placeholder="e.g. 428.57"
+                  value={price}
+                  onChangeText={handleBasePriceChange}
+                  keyboardType="numeric"
+                  iconName="cash-outline"
+                />
+              )}
+
+              {/* Live Price Breakdown Preview */}
+              {(parseFloat(price) > 0 || parseFloat(inclusivePrice) > 0) && (
+                <View style={styles.livePricePreviewBox}>
+                  <View style={styles.livePricePreviewRow}>
+                    <View style={styles.livePricePreviewCol}>
+                      <Text style={styles.livePricePreviewLabel}>BASE (EXCL.)</Text>
+                      <Text style={styles.livePricePreviewVal}>₹{parseFloat(price || '0').toFixed(2)}</Text>
+                    </View>
+                    <Text style={styles.livePricePreviewPlus}>+</Text>
+                    <View style={styles.livePricePreviewCol}>
+                      <Text style={styles.livePricePreviewLabel}>GST ({gstRate}%)</Text>
+                      <Text style={styles.livePricePreviewVal}>
+                        ₹{(parseFloat(price || '0') * (parseFloat(gstRate || '0') / 100)).toFixed(2)}
+                      </Text>
+                    </View>
+                    <Text style={styles.livePricePreviewPlus}>=</Text>
+                    <View style={styles.livePricePreviewCol}>
+                      <Text style={[styles.livePricePreviewLabel, { color: '#4ADE80' }]}>FINAL (INCL.)</Text>
+                      <Text style={[styles.livePricePreviewVal, { color: '#4ADE80', fontWeight: '800' }]}>
+                        ₹{(parseFloat(price || '0') * (1 + parseFloat(gstRate || '0') / 100)).toFixed(2)}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              )}
 
               <InputField
                 label="GST Rate (%)"
                 placeholder="e.g. 18"
                 value={gstRate}
-                onChangeText={setGstRate}
+                onChangeText={handleGstRateChange}
                 keyboardType="numeric"
                 iconName="receipt-outline"
               />
@@ -538,7 +677,7 @@ export default function ProductsScreen() {
                     <TouchableOpacity
                       key={rate}
                       style={[styles.shortcutBtn, gstRate === rate && styles.activeShortcutBtn]}
-                      onPress={() => setGstRate(rate)}
+                      onPress={() => handleGstRateChange(rate)}
                     >
                       <Text
                         style={[
@@ -1035,6 +1174,69 @@ const styles = StyleSheet.create({
   },
   modalScroll: {
     paddingBottom: 24,
+  },
+  priceModeSelector: {
+    flexDirection: 'row',
+    backgroundColor: '#24242a',
+    borderRadius: 10,
+    padding: 3,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(212, 175, 55, 0.2)',
+  },
+  priceModeBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  priceModeBtnActive: {
+    backgroundColor: '#D4AF37',
+  },
+  priceModeBtnText: {
+    color: '#D4AF37',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  priceModeBtnTextActive: {
+    color: '#191820',
+    fontWeight: '800',
+  },
+  livePricePreviewBox: {
+    backgroundColor: 'rgba(212, 175, 55, 0.08)',
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(212, 175, 55, 0.2)',
+  },
+  livePricePreviewRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  livePricePreviewCol: {
+    alignItems: 'center',
+  },
+  livePricePreviewLabel: {
+    color: '#8E8E9F',
+    fontSize: 9,
+    fontWeight: '700',
+    marginBottom: 2,
+    letterSpacing: 0.5,
+  },
+  livePricePreviewVal: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  livePricePreviewPlus: {
+    color: '#8E8E9F',
+    fontSize: 12,
+    fontWeight: '600',
   },
   gstShortcuts: {
     marginVertical: 12,
