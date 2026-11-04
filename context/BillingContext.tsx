@@ -165,6 +165,7 @@ export const BillingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (addProductThunk.rejected.match(resultAction)) {
       throw new Error(resultAction.payload as string || 'Failed to add product');
     }
+    dispatch(fetchProducts());
   };
 
   const updateProduct = async (updatedProduct: Product): Promise<void> => {
@@ -172,6 +173,7 @@ export const BillingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (updateProductThunk.rejected.match(resultAction)) {
       throw new Error(resultAction.payload as string || 'Failed to update product');
     }
+    dispatch(fetchProducts());
   };
 
   const deleteProduct = (id: string) => {

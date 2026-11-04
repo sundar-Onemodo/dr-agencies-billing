@@ -70,6 +70,7 @@ exports.login = async (req, res) => {
     return res.status(200).json({
       message: 'Login successful',
       token: data.session.access_token,
+      refreshToken: data.session.refresh_token,
       expiresIn: data.session.expires_in,
       user: {
         id: data.user.id,
@@ -80,5 +81,43 @@ exports.login = async (req, res) => {
   } catch (err) {
     console.error('Login Error:', err.message || err);
     return res.status(500).json({ error: 'Server error during login.' });
+  }
+};
+
+/**
+ * Refresh an expired access token using a valid refresh token
+ * POST /auth/refresh
+ */
+exports.refreshToken = async (req, res) => {
+  const { refreshToken } = req.body;
+
+  if (!refreshToken) {
+    return res.status(400).json({ error: 'Refresh token is required.' });
+  }
+
+  try {
+    const { data, error } = await supabase.auth.refreshSession({
+      refresh_token: refreshToken
+    });
+
+    if (error || !data.session) {
+      console.warn('Supabase refresh session failed:', error ? error.message : 'No session returned');
+      return res.status(401).json({ error: error ? error.message : 'Invalid or expired session. Please login again.' });
+    }
+
+    return res.status(200).json({
+      message: 'Token refreshed successfully',
+      token: data.session.access_token,
+      refreshToken: data.session.refresh_token,
+      expiresIn: data.session.expires_in,
+      user: {
+        id: data.user.id,
+        email: data.user.email,
+        name: data.user.user_metadata?.name
+      }
+    });
+  } catch (err) {
+    console.error('Refresh Token Error:', err.message || err);
+    return res.status(500).json({ error: 'Server error during token refresh.' });
   }
 };

@@ -43,9 +43,11 @@ const initialState: BillState = {
 
 const getAuthHeaders = (state: RootState) => {
   const token = state.auth.token;
+  const refreshToken = state.auth.refreshToken;
   return {
     'Content-Type': 'application/json',
-    'Authorization': `Bearer ${token}`
+    'Authorization': `Bearer ${token}`,
+    ...(refreshToken ? { 'x-refresh-token': refreshToken } : {})
   };
 };
 

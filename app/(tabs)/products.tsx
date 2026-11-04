@@ -83,6 +83,13 @@ export default function ProductsScreen() {
   const [addStockAmount, setAddStockAmount] = useState('');
   const [addStockNote, setAddStockNote] = useState('');
   const [submittingAddStock, setSubmittingAddStock] = useState(false);
+  const [savingProduct, setSavingProduct] = useState(false);
+
+  // Active product for stock modal: always get freshest data from store
+  const activeProductForStock = useMemo(() => {
+    if (!selectedProductForStock) return null;
+    return products.find((p) => String(p.id) === String(selectedProductForStock.id)) || selectedProductForStock;
+  }, [products, selectedProductForStock]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -97,23 +104,48 @@ export default function ProductsScreen() {
 
   // Open modal for stock history
   const handleOpenStockHistory = (product: Product) => {
-    setSelectedProductForStock(product);
+    const freshProduct = products.find((p) => String(p.id) === String(product.id)) || product;
+    setSelectedProductForStock(freshProduct);
+    setStockLogs([]); // Clear immediately so previous product logs never leak or flash
+    setLoadingStockLogs(true);
     setAddStockAmount('');
     setAddStockNote('');
     setStockModalVisible(true);
-    loadProductStockHistory(product.id);
+    loadProductStockHistory(freshProduct);
   };
 
-  const loadProductStockHistory = async (productId: string) => {
+  const loadProductStockHistory = async (targetProduct: Product) => {
+    if (!targetProduct || !targetProduct.id) return;
     try {
       setLoadingStockLogs(true);
-      const rawLogs = await fetchProductStockLogs(productId);
+      const rawLogs = await fetchProductStockLogs(targetProduct.id);
       
       // Strict product isolation: only process logs for this specific product
       const productOnlyLogs = (rawLogs || []).filter((log) => {
         const logProdId = String(log.productId || (log as any).product_id || '');
-        return logProdId === String(productId);
+        return logProdId === String(targetProduct.id);
       });
+
+      // Latest fresh product from Redux store if available, fallback to targetProduct
+      const freshProduct = products.find((p) => String(p.id) === String(targetProduct.id)) || targetProduct;
+
+      // If no historical logs exist in DB but product has current stock, display opening stock entry
+      if (productOnlyLogs.length === 0 && freshProduct && freshProduct.stockQty > 0) {
+        const initLog = {
+          id: `init-${freshProduct.id}`,
+          productId: String(freshProduct.id),
+          productName: freshProduct.name,
+          type: 'IN' as const,
+          quantity: freshProduct.stockQty,
+          inQty: freshProduct.stockQty,
+          outQty: 0,
+          balance: freshProduct.stockQty,
+          referenceId: 'Initial Stock Opening',
+          createdAt: new Date().toISOString()
+        };
+        setStockLogs([initLog]);
+        return;
+      }
 
       // Calculate running balance step by step (chronological order)
       const sortedAsc = [...productOnlyLogs].sort((a, b) => 
@@ -140,7 +172,23 @@ export default function ProductsScreen() {
       setStockLogs(logsWithBal.reverse());
     } catch (err: any) {
       console.error('Error fetching stock history:', err);
-      setStockLogs([]);
+      const freshProduct = products.find((p) => String(p.id) === String(targetProduct.id)) || targetProduct;
+      if (freshProduct && freshProduct.stockQty > 0) {
+        setStockLogs([{
+          id: `init-${freshProduct.id}`,
+          productId: String(freshProduct.id),
+          productName: freshProduct.name,
+          type: 'IN' as const,
+          quantity: freshProduct.stockQty,
+          inQty: freshProduct.stockQty,
+          outQty: 0,
+          balance: freshProduct.stockQty,
+          referenceId: 'Current Stock',
+          createdAt: new Date().toISOString()
+        }]);
+      } else {
+        setStockLogs([]);
+      }
     } finally {
       setLoadingStockLogs(false);
     }
@@ -164,7 +212,7 @@ export default function ProductsScreen() {
   }, [stockLogs]);
 
   const handleAddStockSubmit = async () => {
-    if (!selectedProductForStock) return;
+    if (!activeProductForStock) return;
     const addQty = parseFloat(addStockAmount);
     if (isNaN(addQty) || addQty <= 0) {
       showWarning('Validation Error', 'Please enter a valid positive quantity in kg.');
@@ -174,14 +222,14 @@ export default function ProductsScreen() {
     try {
       setSubmittingAddStock(true);
       const updated = await addStockQty(
-        selectedProductForStock.id, 
+        activeProductForStock.id, 
         addQty, 
         addStockNote.trim() || 'RESTOCK'
       );
       setSelectedProductForStock(updated);
       setAddStockAmount('');
       setAddStockNote('');
-      await loadProductStockHistory(selectedProductForStock.id);
+      await loadProductStockHistory(updated);
       showSuccess('Stock Updated', `Added +${addQty} kg to "${updated.name}". Current Stock: ${updated.stockQty} kg.`, undefined, 'trending-up');
     } catch (err: any) {
       showError('Error', err.message || 'Failed to add stock quantity.');
@@ -200,6 +248,7 @@ export default function ProductsScreen() {
     setGstRate('18');
     setPriceMode('INCLUSIVE');
     setStockQty('0');
+    setSavingProduct(false);
     setModalVisible(true);
   };
 
@@ -216,6 +265,7 @@ export default function ProductsScreen() {
     setGstRate(gRate.toString());
     setPriceMode('INCLUSIVE');
     setStockQty(product.stockQty?.toString() || '0');
+    setSavingProduct(false);
     setModalVisible(true);
   };
 
@@ -323,6 +373,7 @@ export default function ProductsScreen() {
     const finalName = hsn.trim() ? `${name.trim()} HSN: ${hsn.trim()}` : name.trim();
 
     try {
+      setSavingProduct(true);
       if (editingProduct) {
         // Update
         await updateProduct({
@@ -346,6 +397,8 @@ export default function ProductsScreen() {
       setModalVisible(false);
     } catch (err: any) {
       showError('Error', err.message || 'Failed to save product.');
+    } finally {
+      setSavingProduct(false);
     }
   };
 
@@ -695,6 +748,8 @@ export default function ProductsScreen() {
               <GoldButton
                 title={editingProduct ? 'Update Product' : 'Add Product'}
                 onPress={handleSave}
+                loading={savingProduct}
+                disabled={savingProduct}
                 style={styles.modalSaveBtn}
               />
             </ScrollView>
@@ -716,12 +771,12 @@ export default function ProductsScreen() {
           <View style={styles.stockScreenHeader}>
             <View style={{ flex: 1 }}>
               <Text style={styles.stockScreenTitle} numberOfLines={1}>
-                {selectedProductForStock?.name || 'Stock History'}
+                {activeProductForStock?.name || 'Stock History'}
               </Text>
               <View style={styles.headerStockBadgeRow}>
                 <Text style={styles.headerStockLabel}>Current Stock: </Text>
                 <Text style={styles.headerStockValue}>
-                  {selectedProductForStock?.stockQty ?? 0} kg
+                  {activeProductForStock?.stockQty ?? 0} kg
                 </Text>
               </View>
             </View>
@@ -802,7 +857,7 @@ export default function ProductsScreen() {
               <View style={[styles.kpiCard, { borderColor: 'rgba(212, 175, 55, 0.25)' }]}>
                 <Text style={styles.kpiLabel}>BALANCE</Text>
                 <Text style={[styles.kpiValue, { color: '#D4AF37' }]}>
-                  {selectedProductForStock?.stockQty ?? 0} kg
+                  {activeProductForStock?.stockQty ?? 0} kg
                 </Text>
               </View>
             </View>
@@ -813,7 +868,7 @@ export default function ProductsScreen() {
                 Stock Movement Records ({stockLogs.length})
               </Text>
               <TouchableOpacity
-                onPress={() => selectedProductForStock && loadProductStockHistory(selectedProductForStock.id)}
+                onPress={() => activeProductForStock && loadProductStockHistory(activeProductForStock)}
                 style={styles.historyRefreshBtn}
               >
                 <Ionicons name="refresh" size={14} color="#D4AF37" style={{ marginRight: 4 }} />

@@ -218,17 +218,7 @@ exports.getStockLedger = async (req, res) => {
   try {
     let query = supabase
       .from('product_stock_logs')
-      .select(`
-        id,
-        product_id,
-        type,
-        quantity,
-        reference_id,
-        created_at,
-        products (
-          name
-        )
-      `)
+      .select('*')
       .eq('user_id', req.user.id);
 
     if (targetProductId && targetProductId !== 'undefined' && targetProductId !== 'null') {
@@ -248,89 +238,101 @@ exports.getStockLedger = async (req, res) => {
 
     query = query.order('created_at', { ascending: false });
 
-    let { data, error } = await query;
-
-    // Resilient fallback: if the database table uses the legacy schema (change_type, qty_changed, notes)
-    // instead of (type, quantity, reference_id), catch the missing column error and query the legacy columns
-    if (error && (error.message.includes('type') || error.message.includes('column') || error.code === '42703' || error.code === 'PGRST204')) {
-      let fallbackQuery = supabase
-        .from('product_stock_logs')
-        .select(`
-          id,
-          product_id,
-          change_type,
-          qty_changed,
-          notes,
-          bill_id,
-          created_at,
-          products (
-            name
-          )
-        `)
-        .eq('user_id', req.user.id);
-
-      if (targetProductId && targetProductId !== 'undefined' && targetProductId !== 'null') {
-        const parsedId = parseInt(targetProductId, 10);
-        if (!isNaN(parsedId)) {
-          fallbackQuery = fallbackQuery.eq('product_id', parsedId);
-        } else {
-          fallbackQuery = fallbackQuery.eq('product_id', targetProductId);
-        }
-      }
-
-      if (from && to) {
-        const fromDate = new Date(`${from}T00:00:00.000Z`).toISOString();
-        const toDate = new Date(`${to}T23:59:59.999Z`).toISOString();
-        fallbackQuery = fallbackQuery.gte('created_at', fromDate).lte('created_at', toDate);
-      }
-
-      fallbackQuery = fallbackQuery.order('created_at', { ascending: false });
-
-      const fallbackResult = await fallbackQuery;
-      if (fallbackResult.error) {
-        return res.status(400).json({ error: fallbackResult.error.message });
-      }
-
-      const formattedLogs = (fallbackResult.data || []).map(log => {
-        const qtyChanged = parseFloat(log.qty_changed || 0);
-        const isPositive = qtyChanged >= 0;
-        const calculatedType = log.change_type === 'BILL_SALE' || log.change_type === 'OUT'
-          ? 'OUT'
-          : (isPositive ? 'IN' : 'OUT');
-        return {
-          id: String(log.id),
-          productId: String(log.product_id),
-          productName: log.products ? log.products.name : 'Unknown Product',
-          type: calculatedType,
-          quantity: Math.abs(qtyChanged),
-          referenceId: log.notes || (log.bill_id ? `BILL-${log.bill_id}` : log.change_type || 'RESTOCK'),
-          createdAt: log.created_at
-        };
-      });
-
-      return res.status(200).json({
-        success: true,
-        logs: formattedLogs
-      });
-    }
+    const { data: rawLogs, error } = await query;
 
     if (error) {
+      console.error('Error fetching stock logs:', error.message);
       return res.status(400).json({ error: error.message });
     }
 
-    const formattedLogs = (data || []).map(log => ({
-      id: String(log.id),
-      productId: String(log.product_id),
-      productName: log.products ? log.products.name : 'Unknown Product',
-      type: log.type || 'IN',
-      quantity: parseFloat(log.quantity || 0),
-      referenceId: log.reference_id || '',
-      createdAt: log.created_at
-    }));
+    // Load products name lookup dictionary
+    let productNames = {};
+    try {
+      const { data: prods } = await supabase
+        .from('products')
+        .select('id, name')
+        .eq('user_id', req.user.id);
+      if (prods) {
+        prods.forEach(p => {
+          productNames[String(p.id)] = p.name;
+        });
+      }
+    } catch (pErr) {
+      console.warn('Failed to load product names for stock ledger:', pErr.message);
+    }
+
+    const formattedLogs = (rawLogs || []).map(log => {
+      const pid = String(log.product_id);
+      const qtyChanged = log.qty_changed !== undefined && log.qty_changed !== null ? parseFloat(log.qty_changed) : null;
+      let calculatedType = log.type;
+      if (!calculatedType) {
+        if (qtyChanged !== null) {
+          calculatedType = (log.change_type === 'BILL_SALE' || qtyChanged < 0) ? 'OUT' : 'IN';
+        } else {
+          calculatedType = 'IN';
+        }
+      }
+
+      let calculatedQty = 0;
+      if (log.quantity !== undefined && log.quantity !== null) {
+        calculatedQty = Math.abs(parseFloat(log.quantity));
+      } else if (qtyChanged !== null) {
+        calculatedQty = Math.abs(qtyChanged);
+      }
+
+      const calculatedRef = log.reference_id || log.notes || (log.bill_id ? `BILL-${log.bill_id}` : log.change_type) || 'STOCK_UPDATE';
+
+      return {
+        id: String(log.id),
+        productId: pid,
+        productName: productNames[pid] || 'Product',
+        type: calculatedType,
+        quantity: calculatedQty,
+        referenceId: calculatedRef,
+        createdAt: log.created_at
+      };
+    });
+
+    let finalLogs = formattedLogs;
+
+    // Auto-heal missing initial log: if viewing a specific product that has stock but 0 logged records
+    if (targetProductId && finalLogs.length === 0) {
+      try {
+        const { data: prod } = await supabase
+          .from('products')
+          .select('*')
+          .eq('id', targetProductId)
+          .eq('user_id', req.user.id)
+          .maybeSingle();
+
+        if (prod && parseFloat(prod.stock_qty || 0) > 0) {
+          const initQty = parseFloat(prod.stock_qty);
+          await recordStockLogs(supabase, {
+            user_id: req.user.id,
+            product_id: prod.id,
+            type: 'IN',
+            quantity: initQty,
+            reference_id: 'INITIAL'
+          });
+
+          finalLogs = [{
+            id: `init-${prod.id}`,
+            productId: String(prod.id),
+            productName: prod.name,
+            type: 'IN',
+            quantity: initQty,
+            referenceId: 'INITIAL',
+            createdAt: prod.created_at || new Date().toISOString()
+          }];
+        }
+      } catch (autoHealErr) {
+        console.warn('Auto-heal initial stock log notice:', autoHealErr.message);
+      }
+    }
 
     return res.status(200).json({
       success: true,
-      logs: formattedLogs
+      logs: finalLogs
     });
   } catch (err) {
     console.error('Get Stock Ledger Error:', err.message || err);

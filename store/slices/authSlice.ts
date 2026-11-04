@@ -1,4 +1,4 @@
-import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';
+import { createAsyncThunk, createSlice, PayloadAction } from '@reduxjs/toolkit';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from '../../constants/Api';
 
@@ -10,6 +10,7 @@ interface User {
 
 interface AuthState {
   token: string | null;
+  refreshToken: string | null;
   user: User | null;
   isAuthenticated: boolean;
   isInitialized: boolean;
@@ -19,6 +20,7 @@ interface AuthState {
 
 const initialState: AuthState = {
   token: null,
+  refreshToken: null,
   user: null,
   isAuthenticated: false,
   isInitialized: false,
@@ -65,28 +67,78 @@ export const loginUser = createAsyncThunk(
         return rejectWithValue(data.error || 'Login failed');
       }
 
-      // Persist user and token on successful login
-      await AsyncStorage.setItem('token', data.token);
-      await AsyncStorage.setItem('user', JSON.stringify(data.user));
+      // Persist user, access token and refresh token on successful login
+      if (data.token) {
+        await AsyncStorage.setItem('token', data.token);
+      }
+      if (data.refreshToken) {
+        await AsyncStorage.setItem('refreshToken', data.refreshToken);
+      }
+      if (data.user) {
+        await AsyncStorage.setItem('user', JSON.stringify(data.user));
+      }
 
-      return data; // expected { token, user: { id, email, name } }
+      return data;
     } catch (err: any) {
       return rejectWithValue(err.message || 'Server connection failed');
     }
   }
 );
 
-export const initializeAuth = createAsyncThunk(
-  'auth/initializeAuth',
+export const refreshAuthToken = createAsyncThunk(
+  'auth/refreshAuthToken',
   async (_, { rejectWithValue }) => {
     try {
+      const refreshToken = await AsyncStorage.getItem('refreshToken');
+      if (!refreshToken) {
+        return rejectWithValue('No refresh token stored');
+      }
+
+      const response = await fetch(`${API_URL}/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        return rejectWithValue(data.error || 'Token refresh failed');
+      }
+
+      if (data.token) {
+        await AsyncStorage.setItem('token', data.token);
+      }
+      if (data.refreshToken) {
+        await AsyncStorage.setItem('refreshToken', data.refreshToken);
+      }
+      if (data.user) {
+        await AsyncStorage.setItem('user', JSON.stringify(data.user));
+      }
+
+      return data;
+    } catch (err: any) {
+      return rejectWithValue(err.message || 'Token refresh connection error');
+    }
+  }
+);
+
+export const initializeAuth = createAsyncThunk(
+  'auth/initializeAuth',
+  async (_, { dispatch, rejectWithValue }) => {
+    try {
       const token = await AsyncStorage.getItem('token');
+      const refreshToken = await AsyncStorage.getItem('refreshToken');
       const userJson = await AsyncStorage.getItem('user');
       const user = userJson ? JSON.parse(userJson) : null;
+
       if (token && user) {
-        return { token, user };
+        // Proactively refresh access token in the background so it stays fresh
+        if (refreshToken) {
+          dispatch(refreshAuthToken());
+        }
+        return { token, refreshToken, user };
       }
-      return { token: null, user: null };
+      return { token: null, refreshToken: null, user: null };
     } catch (err: any) {
       return rejectWithValue(err.message || 'Failed to initialize auth');
     }
@@ -98,6 +150,7 @@ export const logoutUserThunk = createAsyncThunk(
   async (_, { dispatch }) => {
     try {
       await AsyncStorage.removeItem('token');
+      await AsyncStorage.removeItem('refreshToken');
       await AsyncStorage.removeItem('user');
     } catch (err) {
       console.error('Failed to clear AsyncStorage:', err);
@@ -113,9 +166,16 @@ const authSlice = createSlice({
   reducers: {
     logoutUser: (state) => {
       state.token = null;
+      state.refreshToken = null;
       state.user = null;
       state.isAuthenticated = false;
       state.error = null;
+    },
+    setTokens: (state, action: PayloadAction<{ token: string; refreshToken?: string }>) => {
+      state.token = action.payload.token;
+      if (action.payload.refreshToken) {
+        state.refreshToken = action.payload.refreshToken;
+      }
     },
     clearAuthError: (state) => {
       state.error = null;
@@ -143,6 +203,7 @@ const authSlice = createSlice({
       .addCase(loginUser.fulfilled, (state, action) => {
         state.loading = false;
         state.token = action.payload.token;
+        state.refreshToken = action.payload.refreshToken || null;
         state.user = action.payload.user;
         state.isAuthenticated = true;
       })
@@ -150,6 +211,17 @@ const authSlice = createSlice({
         state.loading = false;
         state.error = action.payload as string;
         state.isAuthenticated = false;
+      })
+      // Refresh Auth Token
+      .addCase(refreshAuthToken.fulfilled, (state, action) => {
+        state.token = action.payload.token;
+        if (action.payload.refreshToken) {
+          state.refreshToken = action.payload.refreshToken;
+        }
+        if (action.payload.user) {
+          state.user = action.payload.user;
+        }
+        state.isAuthenticated = true;
       })
       // Initialize Auth
       .addCase(initializeAuth.pending, (state) => {
@@ -159,6 +231,7 @@ const authSlice = createSlice({
       .addCase(initializeAuth.fulfilled, (state, action) => {
         state.loading = false;
         state.token = action.payload.token;
+        state.refreshToken = action.payload.refreshToken;
         state.user = action.payload.user;
         state.isAuthenticated = !!action.payload.token;
         state.isInitialized = true;
@@ -167,31 +240,9 @@ const authSlice = createSlice({
         state.loading = false;
         state.error = action.payload as string;
         state.isInitialized = true;
-      })
-      // Matcher to automatically log out on 401 Unauthorized or expired token
-      .addMatcher(
-        (action) => action.type.endsWith('/rejected'),
-        (state, action: any) => {
-          const payload = action.payload;
-          const errorMessage = typeof payload === 'string' ? payload : (payload?.error || '');
-          if (
-            errorMessage.includes('Invalid, expired, or revoked access token') ||
-            errorMessage.includes('Access token required') ||
-            errorMessage.includes('Please authenticate') ||
-            (payload && payload.status === 401)
-          ) {
-            console.log('Token expired or unauthorized request. Logging out user...');
-            state.token = null;
-            state.user = null;
-            state.isAuthenticated = false;
-            // Clear storage
-            AsyncStorage.removeItem('token').catch(() => {});
-            AsyncStorage.removeItem('user').catch(() => {});
-          }
-        }
-      );
+      });
   },
 });
 
-export const { logoutUser, clearAuthError } = authSlice.actions;
+export const { logoutUser, setTokens, clearAuthError } = authSlice.actions;
 export default authSlice.reducer;
