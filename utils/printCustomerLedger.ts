@@ -1,6 +1,7 @@
 import { CompanySettings } from '@/context/BillingContext';
 import { BILLING_APP_LOGO_BASE64 } from '@/assets/images/billingAppLogoBase64';
 import { Customer, CustomerPayment } from '@/store/slices/customerSlice';
+import { formatPhoneNumber } from './customer';
 import * as FileSystem from 'expo-file-system';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
@@ -406,7 +407,7 @@ export const generateCustomerLedgerHtml = (
                   <h2 class="company-name">${companySettings.name}</h2>
                   <div class="company-text">${companySettings.address}</div>
                   <div class="company-text"><strong>GSTIN:</strong> ${companySettings.gstin}</div>
-                  <div class="company-text"><strong>Phone:</strong> ${companySettings.phone}</div>
+                  <div class="company-text"><strong>Phone:</strong> ${formatPhoneNumber(companySettings.phone, '-')}</div>
                 </div>
               </div>
             </td>
@@ -437,11 +438,11 @@ export const generateCustomerLedgerHtml = (
         <div class="info-grid">
           <div class="customer-info-box">
             <div class="section-label">Billed To / Customer Information</div>
-            <div class="customer-title">${customer.name}</div>
-            <div class="customer-detail"><strong>Address:</strong> ${customer.address || 'Palaganatham, Madurai'}</div>
-            <div class="customer-detail"><strong>Contact No:</strong> ${customer.phone || 'N/A'}</div>
-            <div class="customer-detail"><strong>GSTIN:</strong> ${customer.gstin || 'Unregistered'}</div>
-            <div class="customer-detail"><strong>State:</strong> ${customer.state || 'Tamil Nadu (33)'}</div>
+            <div class="customer-title">${customer.name || '-'}</div>
+            <div class="customer-detail"><strong>Address:</strong> ${customer.address || '-'}</div>
+            <div class="customer-detail"><strong>Contact No:</strong> ${formatPhoneNumber(customer.phone, '-')}</div>
+            <div class="customer-detail"><strong>GSTIN:</strong> ${customer.gstin || '-'}</div>
+            <div class="customer-detail"><strong>State:</strong> ${customer.state || '-'}</div>
           </div>
           <div class="summary-info-box">
             <div class="section-label">Account Financial Summary</div>

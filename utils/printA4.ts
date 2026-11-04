@@ -3,7 +3,7 @@ import { Bill, CompanySettings } from '@/context/BillingContext';
 import * as FileSystem from 'expo-file-system';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
-import { parseCustomerInfo } from './customer';
+import { parseCustomerInfo, formatPhoneNumber } from './customer';
 
 /**
  * Parses the product name to separate the main name and HSN code if present.
@@ -120,7 +120,8 @@ export const generateA4Html = (bill: Bill, companySettings: CompanySettings): st
     const phoneMatch = addressStr.match(/\b\d{10}\b/);
     return phoneMatch ? phoneMatch[0] : '';
   };
-  const phone = extractPhone(customer.address) || '9385707011';
+  const rawCustomerPhone = customer.phone || extractPhone(customer.address);
+  const formattedCustomerPhone = formatPhoneNumber(rawCustomerPhone, '-');
   const cleanAddress = (customer.address || '').replace(/\b\d{10}\b/, '').replace(/Contact\s*No\.?\s*:\s*/i, '').trim();
 
   // Format date
@@ -182,7 +183,7 @@ export const generateA4Html = (bill: Bill, companySettings: CompanySettings): st
         <td>
           <div class="item-name">${name}</div>
         </td>
-        <td style="text-align: center;">${hsn || '21039040'}</td>
+        <td style="text-align: center;">${hsn || '-'}</td>
         <td style="text-align: center;">${item.qty} kg</td>
         <td style="text-align: right;">₹${item.price.toFixed(2)}</td>
         <td style="text-align: right;">${cgstDisplay}</td>
@@ -541,9 +542,9 @@ export const generateA4Html = (bill: Bill, companySettings: CompanySettings): st
                 <div class="company-info">
                   <h1 class="company-name">${companySettings.name}</h1>
                   <div class="company-subtext">${companySettings.address}</div>
-                  <div class="company-subtext">Email: ${companySettings.email || 'dragencies6250@gmail.com'}</div>
-                  <div class="company-subtext" style="font-weight: bold;">GSTIN: ${companySettings.gstin}</div>
-                  <div class="company-subtext">Phone No: ${companySettings.phone}</div>
+                  <div class="company-subtext">Email: ${companySettings.email || '-'}</div>
+                  <div class="company-subtext" style="font-weight: bold;">GSTIN: ${companySettings.gstin || '-'}</div>
+                  <div class="company-subtext">Phone No: ${formatPhoneNumber(companySettings.phone, '-')}</div>
                 </div>
               </div>
             </td>
@@ -572,11 +573,11 @@ export const generateA4Html = (bill: Bill, companySettings: CompanySettings): st
 
         <div class="bill-to-section">
           <div class="bill-to-title">Bill To</div>
-          <div class="bill-to-name">${customer.name}</div>
-          <div>${cleanAddress || 'PALAGANATHAM'}</div>
-          <div>Contact No.: ${phone}</div>
-          <div>GSTIN : ${customer.gstin || '33KSBPS0649G1ZL'}</div>
-          <div>State: ${customer.state || '33-Tamil Nadu'}</div>
+          <div class="bill-to-name">${customer.name || '-'}</div>
+          <div>${cleanAddress || '-'}</div>
+          <div>Contact No.: ${formattedCustomerPhone}</div>
+          <div>GSTIN : ${customer.gstin || '-'}</div>
+          <div>State: ${customer.state || '-'}</div>
         </div>
 
         <table class="items-table">

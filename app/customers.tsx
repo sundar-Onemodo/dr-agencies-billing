@@ -21,6 +21,7 @@ import { GlassCard } from '@/components/ui/GlassCard';
 import { GoldButton } from '@/components/ui/GoldButton';
 import { InputField } from '@/components/ui/InputField';
 import { Customer } from '@/store/slices/customerSlice';
+import { formatPhoneNumber } from '@/utils/customer';
 
 export default function CustomersScreen() {
   const router = useRouter();
@@ -355,10 +356,10 @@ export default function CustomersScreen() {
                             onPress={() => Linking.openURL(`tel:${customer.phone}`)}
                             activeOpacity={0.7}
                           >
-                            <Text style={styles.infoValueClickable}>{customer.phone}</Text>
+                            <Text style={styles.infoValueClickable}>{formatPhoneNumber(customer.phone, '-')}</Text>
                           </TouchableOpacity>
                         ) : (
-                          <Text style={styles.infoValueEmpty}>Not provided</Text>
+                          <Text style={styles.infoValueEmpty}>-</Text>
                         )}
                       </View>
                     </View>

@@ -26,7 +26,7 @@ import { GoldButton } from '@/components/ui/GoldButton';
 import { InputField } from '@/components/ui/InputField';
 import { BluetoothEscposPrinter } from 'react-native-bluetooth-escpos-printer';
 import { PrinterSimulationModal } from '@/components/ui/PrinterSimulationModal';
-import { serializeCustomerInfo, parseCustomerInfo } from '@/utils/customer';
+import { serializeCustomerInfo, parseCustomerInfo, formatPhoneNumber } from '@/utils/customer';
 import { printA4Invoice, downloadA4InvoicePdf } from '@/utils/printA4';
 
 const parseItemNameAndHsn = (name: string) => {
@@ -1419,7 +1419,7 @@ export default function CreateBillScreen() {
                       <View style={{ flex: 1 }}>
                         <Text style={styles.customerDropdownName}>{c.name}</Text>
                         <Text style={styles.customerDropdownSub} numberOfLines={1}>
-                          {c.phone ? `📞 ${c.phone}` : ''} {c.address ? `• 📍 ${c.address}` : ''}
+                          {c.phone ? `📞 ${formatPhoneNumber(c.phone)}` : ''} {c.address ? `• 📍 ${c.address}` : ''}
                         </Text>
                       </View>
                       <View style={styles.autoFillBadge}>
@@ -1443,10 +1443,13 @@ export default function CreateBillScreen() {
 
             <InputField
               label="Customer Contact No"
-              placeholder="Enter 10-digit phone number"
+              placeholder="e.g. +91 98765-43210"
               value={customerPhone}
               onChangeText={(text) => {
-                const sanitized = text.replace(/[^0-9]/g, '');
+                let sanitized = text.replace(/[^0-9]/g, '');
+                if (sanitized.startsWith('91') && sanitized.length === 12) {
+                  sanitized = sanitized.slice(2);
+                }
                 if (sanitized.length <= 10) {
                   setCustomerPhone(sanitized);
                 }

@@ -2,7 +2,7 @@ import { GoldButton } from '@/components/ui/GoldButton';
 import { Bill, useBilling } from '@/context/BillingContext';
 import { useAlert } from '@/context/AlertContext';
 import { BILLING_APP_LOGO_RAW_BASE64 } from '@/assets/images/billingAppLogoBase64';
-import { parseCustomerInfo } from '@/utils/customer';
+import { parseCustomerInfo, formatPhoneNumber } from '@/utils/customer';
 import { printA4Invoice } from '@/utils/printA4';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -133,7 +133,8 @@ export default function BillPreviewScreen() {
     const phoneMatch = addressStr.match(/\b\d{10}\b/);
     return phoneMatch ? phoneMatch[0] : '';
   };
-  const phone = extractPhone(customer.address) || '9385707011';
+  const rawCustomerPhone = customer.phone || extractPhone(customer.address);
+  const formattedCustomerPhone = formatPhoneNumber(rawCustomerPhone, '-');
   const cleanAddress = (customer.address || '').replace(/\b\d{10}\b/, '').replace(/Contact\s*No\.?\s*:\s*/i, '').trim();
   
   // Calculate dynamic GST rates if subtotal is available
@@ -523,9 +524,9 @@ Thank you for doing business!
                       <View style={{ flex: 1 }}>
                         <Text style={styles.a4SellerName}>{companySettings.name}</Text>
                         <Text style={styles.a4SellerDetailText}>{companySettings.address}</Text>
-                        <Text style={styles.a4SellerDetailText}>Email: {companySettings.email || 'krishnamarketingagency6@gmail.com'}</Text>
-                        <Text style={[styles.a4SellerDetailText, { fontWeight: '700' }]}>GSTIN: {companySettings.gstin}</Text>
-                        <Text style={styles.a4SellerDetailText}>State: Tamil Nadu</Text>
+                        <Text style={styles.a4SellerDetailText}>Email: {companySettings.email || '-'}</Text>
+                        <Text style={[styles.a4SellerDetailText, { fontWeight: '700' }]}>GSTIN: {companySettings.gstin || '-'}</Text>
+                        <Text style={styles.a4SellerDetailText}>Phone No: {formatPhoneNumber(companySettings.phone, '-')}</Text>
                       </View>
                     </View>
                   </View>
@@ -552,11 +553,11 @@ Thank you for doing business!
                 {/* Bill To Section */}
                 <View style={styles.a4BillToBox}>
                   <Text style={styles.a4BillToHeader}>Bill To</Text>
-                  <Text style={styles.a4BillToName}>{customer.name}</Text>
-                  <Text style={styles.a4BillToText}>{cleanAddress || 'PALAGANATHAM'}</Text>
-                  <Text style={styles.a4BillToText}>Contact No.: {phone}</Text>
-                  <Text style={styles.a4BillToText}>GSTIN : {customer.gstin || '33KSBPS0649G1ZL'}</Text>
-                  <Text style={styles.a4BillToText}>State: {customer.state || 'Tamil Nadu'}</Text>
+                  <Text style={styles.a4BillToName}>{customer.name || '-'}</Text>
+                  <Text style={styles.a4BillToText}>{cleanAddress || '-'}</Text>
+                  <Text style={styles.a4BillToText}>Contact No.: {formattedCustomerPhone}</Text>
+                  <Text style={styles.a4BillToText}>GSTIN : {customer.gstin || '-'}</Text>
+                  <Text style={styles.a4BillToText}>State: {customer.state || '-'}</Text>
                 </View>
 
                 {/* Items Grid Header */}
@@ -595,7 +596,7 @@ Thank you for doing business!
                         <Text style={[styles.a4TdText, { fontWeight: '600' }]} numberOfLines={2}>{name}</Text>
                       </View>
                       <View style={[styles.a4GridTd, { width: '10%', alignItems: 'center' }]}>
-                        <Text style={styles.a4TdText}>{hsn || '21039040'}</Text>
+                        <Text style={styles.a4TdText}>{hsn || '-'}</Text>
                       </View>
                       <View style={[styles.a4GridTd, { width: '10%', alignItems: 'center' }]}>
                         <Text style={styles.a4TdText}>{item.qty} kg</Text>
@@ -726,8 +727,8 @@ Thank you for doing business!
               </View>
               <Text style={styles.receiptHeaderName}>{companySettings.name}</Text>
               <Text style={styles.receiptHeaderDetail}>{companySettings.address}</Text>
-              <Text style={styles.receiptHeaderDetail}>Phone: {companySettings.phone}</Text>
-              <Text style={styles.receiptHeaderDetail}>GSTIN: {companySettings.gstin}</Text>
+              <Text style={styles.receiptHeaderDetail}>Phone: {formatPhoneNumber(companySettings.phone, '-')}</Text>
+              <Text style={styles.receiptHeaderDetail}>GSTIN: {companySettings.gstin || '-'}</Text>
               
               {renderDivider()}
               <Text style={styles.receiptDocTitle}>TAX INVOICE</Text>
