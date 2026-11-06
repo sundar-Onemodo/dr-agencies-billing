@@ -87,60 +87,70 @@ exports.createBill = async (req, res) => {
       }
     }
 
-    let customerId = null;
+    let customerId = req.body.customerId || req.body.customer_id || null;
     const finalPaymentStatus = req.body.paymentStatus || req.body.payment_status || 'Pending';
 
     try {
-      const { data: existingCustomer, error: findError } = await supabase
-        .from('customers')
-        .select('id, phone')
-        .eq('user_id', req.user.id)
-        .eq('name', name.trim())
-        .maybeSingle();
-
-      if (findError) {
-        console.error('Error finding customer:', findError);
-      }
-
-      if (!findError && existingCustomer) {
-        customerId = existingCustomer.id;
-        
-        // Update customer details if they changed
-        const updatePayload = { address, gstin, state, updated_at: new Date().toISOString() };
-        if (phone || !existingCustomer.phone) {
-          updatePayload.phone = phone || existingCustomer.phone || '';
-        }
-
-        const { error: updateError } = await supabase
+      if (customerId) {
+        // Specific customer profile/branch provided
+        const { data: existingCustomer } = await supabase
           .from('customers')
-          .update(updatePayload)
-          .eq('id', customerId);
+          .select('id, phone, address')
+          .eq('user_id', req.user.id)
+          .eq('id', customerId)
+          .maybeSingle();
 
-        if (updateError) {
-          console.error('Error updating customer:', updateError);
+        if (existingCustomer) {
+          const updatePayload = { updated_at: new Date().toISOString() };
+          if (address) updatePayload.address = address;
+          if (gstin) updatePayload.gstin = gstin;
+          if (state) updatePayload.state = state;
+          if (phone) updatePayload.phone = phone;
+
+          await supabase
+            .from('customers')
+            .update(updatePayload)
+            .eq('id', customerId);
         }
       } else {
-        // Create new customer record
-        const { data: newCustomer, error: insertError } = await supabase
+        // Search by name AND phone/address to avoid confusing different branch locations of the same customer
+        const { data: matchedCustomers, error: findError } = await supabase
           .from('customers')
-          .insert({
-            user_id: req.user.id,
-            name: name.trim(),
-            phone: phone || '',
-            address,
-            gstin,
-            state,
-            total_received: 0.00
-          })
-          .select()
-          .single();
+          .select('id, phone, address')
+          .eq('user_id', req.user.id)
+          .eq('name', name.trim());
 
-        if (insertError) {
-          console.error('Error inserting customer:', insertError);
+        if (findError) {
+          console.error('Error finding customer:', findError);
         }
 
-        if (!insertError && newCustomer) {
-          customerId = newCustomer.id;
+        if (!findError && matchedCustomers && matchedCustomers.length > 0) {
+          const bestMatch = matchedCustomers.find(c => phone && c.phone && c.phone.trim() === phone.trim())
+            || matchedCustomers.find(c => address && c.address && c.address.trim().toLowerCase() === address.trim().toLowerCase())
+            || (matchedCustomers.length === 1 ? matchedCustomers[0] : null);
+
+          if (bestMatch) {
+            customerId = bestMatch.id;
+          }
+        } else {
+          // Create new customer record
+          const { data: newCustomer, error: insertError } = await supabase
+            .from('customers')
+            .insert({
+              user_id: req.user.id,
+              name: name.trim(),
+              phone: phone || '',
+              address: address || '',
+              gstin: gstin || '',
+              state: state || 'Tamil Nadu',
+              total_received: 0.00
+            })
+            .select()
+            .single();
+
+          if (!insertError && newCustomer) {
+            customerId = newCustomer.id;
+          }
         }
       }
     } catch (custErr) {

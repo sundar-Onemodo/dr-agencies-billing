@@ -88,30 +88,30 @@ exports.updateCustomer = async (req, res) => {
       updates.total_received = parseFloat(customer.total_received || 0) + parseFloat(amountReceived);
     }
 
-    // Check for duplicate name or phone with other customers (excluding self)
-    if (updates.name || updates.phone) {
+    // Check for exact duplicate with other customers (excluding self)
+    if (updates.name || updates.phone || updates.address) {
+      const checkName = (updates.name !== undefined ? updates.name : customer.name || '').trim().toLowerCase();
+      const checkPhone = (updates.phone !== undefined ? updates.phone : customer.phone || '').trim();
+      const checkAddress = (updates.address !== undefined ? updates.address : customer.address || '').trim().toLowerCase();
+
       const { data: existingCustomers } = await supabase
         .from('customers')
-        .select('id, name, phone')
+        .select('id, name, phone, address')
         .eq('user_id', req.user.id)
         .neq('id', id);
 
-      if (updates.name) {
-        const dupName = (existingCustomers || []).find(
-          c => c.name && c.name.trim().toLowerCase() === updates.name.toLowerCase()
-        );
-        if (dupName) {
-          return res.status(400).json({ error: `Another customer named "${updates.name}" already exists.` });
-        }
-      }
+      const exactDuplicate = (existingCustomers || []).find(c => {
+        const sameName = c.name && c.name.trim().toLowerCase() === checkName;
+        const samePhone = (c.phone || '').trim() === checkPhone;
+        const sameAddress = (c.address || '').trim().toLowerCase() === checkAddress;
+        if (checkAddress && checkPhone) return sameName && sameAddress && samePhone;
+        if (checkAddress) return sameName && sameAddress;
+        if (checkPhone) return sameName && samePhone;
+        return sameName && (c.address || '').trim() === '' && (c.phone || '').trim() === '';
+      });
 
-      if (updates.phone) {
-        const dupPhone = (existingCustomers || []).find(
-          c => c.phone && c.phone.trim() === updates.phone
-        );
-        if (dupPhone) {
-          return res.status(400).json({ error: `Contact number "${updates.phone}" is already registered to "${dupPhone.name}".` });
-        }
+      if (exactDuplicate) {
+        return res.status(400).json({ error: `Another customer entry with this exact name, location, and contact already exists.` });
       }
     }
 
@@ -171,17 +171,30 @@ exports.createCustomer = async (req, res) => {
       console.warn('Error querying existing customers:', queryError);
     }
 
-    const duplicate = (existingCustomers || []).find(c => {
+    const trimmedAddress = address ? address.trim() : '';
+    const trimmedGstin = gstin ? gstin.trim().toUpperCase() : '';
+
+    // Allow multiple branch locations with the same customer name.
+    // Only reject if an EXACT duplicate profile already exists (same name, same address, and same phone).
+    const exactDuplicate = (existingCustomers || []).find(c => {
       const sameName = c.name && c.name.trim().toLowerCase() === trimmedName.toLowerCase();
-      const samePhone = trimmedPhone && c.phone && c.phone.trim() === trimmedPhone;
-      return sameName || samePhone;
+      const samePhone = (c.phone || '').trim() === trimmedPhone;
+      const sameAddress = (c.address || '').trim().toLowerCase() === trimmedAddress.toLowerCase();
+
+      if (trimmedAddress && trimmedPhone) {
+        return sameName && sameAddress && samePhone;
+      }
+      if (trimmedAddress) {
+        return sameName && sameAddress;
+      }
+      if (trimmedPhone) {
+        return sameName && samePhone;
+      }
+      return sameName && (c.address || '').trim() === '' && (c.phone || '').trim() === '';
     });
 
-    if (duplicate) {
-      if (duplicate.name && duplicate.name.trim().toLowerCase() === trimmedName.toLowerCase()) {
-        return res.status(400).json({ error: `A customer named "${trimmedName}" already exists in your directory.` });
-      }
-      return res.status(400).json({ error: `A customer with contact number "${trimmedPhone}" already exists (${duplicate.name}).` });
+    if (exactDuplicate) {
+      return res.status(400).json({ error: `Customer "${trimmedName}" with this exact address and phone already exists in your directory.` });
     }
 
     const { data: newCustomer, error: insertError } = await supabase
@@ -190,8 +203,8 @@ exports.createCustomer = async (req, res) => {
         user_id: req.user.id,
         name: trimmedName,
         phone: trimmedPhone,
-        address: address ? address.trim() : '',
-        gstin: gstin ? gstin.trim().toUpperCase() : '',
+        address: trimmedAddress,
+        gstin: trimmedGstin,
         state: state ? state.trim() : 'Tamil Nadu',
         total_received: parseFloat(total_received || 0)
       })
@@ -199,6 +212,11 @@ exports.createCustomer = async (req, res) => {
       .single();
 
     if (insertError) {
+      if (insertError.code === '23505' || String(insertError.message || '').includes('unique_user_customer_name')) {
+        return res.status(400).json({ 
+          error: `To save multiple branch locations for "${trimmedName}", please execute the migration in Supabase SQL Editor: ALTER TABLE public.customers DROP CONSTRAINT IF EXISTS unique_user_customer_name;` 
+        });
+      }
       return res.status(400).json({ error: insertError.message });
     }
 

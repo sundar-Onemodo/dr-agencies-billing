@@ -110,57 +110,36 @@ export default function CustomersScreen() {
       return;
     }
 
-    // Duplicate checks
+    // Duplicate checks: Allow same customer name for different branch locations / addresses / phones.
+    // Only reject if an EXACT duplicate profile already exists (same name AND same address AND same phone).
     if (editingCustomer) {
-      // Check if another customer already has this name
-      const duplicateByName = customers.find(
-        (c) => c.id !== editingCustomer.id && c.name.trim().toLowerCase() === trimmedName.toLowerCase()
+      const exactDuplicate = customers.find(
+        (c) =>
+          c.id !== editingCustomer.id &&
+          c.name.trim().toLowerCase() === trimmedName.toLowerCase() &&
+          (c.address || '').trim().toLowerCase() === custAddress.trim().toLowerCase() &&
+          (c.phone || '').trim() === trimmedPhone
       );
-      if (duplicateByName) {
+      if (exactDuplicate) {
         showWarning(
-          'Duplicate Customer Name',
-          `Another customer named "${trimmedName}" already exists in your directory.`
+          'Duplicate Customer Profile',
+          `Another customer profile with this exact name, address, and contact number already exists.`
         );
         return;
-      }
-
-      // Check if another customer already has this phone
-      if (trimmedPhone) {
-        const duplicateByPhone = customers.find(
-          (c) => c.id !== editingCustomer.id && c.phone && c.phone.trim() === trimmedPhone
-        );
-        if (duplicateByPhone) {
-          showWarning(
-            'Duplicate Contact Number',
-            `Contact number "${trimmedPhone}" is already assigned to "${duplicateByPhone.name}".`
-          );
-          return;
-        }
       }
     } else {
-      // Add mode duplicate checks
-      const duplicateByName = customers.find(
-        (c) => c.name.trim().toLowerCase() === trimmedName.toLowerCase()
+      const exactDuplicate = customers.find(
+        (c) =>
+          c.name.trim().toLowerCase() === trimmedName.toLowerCase() &&
+          (c.address || '').trim().toLowerCase() === custAddress.trim().toLowerCase() &&
+          (c.phone || '').trim() === trimmedPhone
       );
-      if (duplicateByName) {
+      if (exactDuplicate) {
         showWarning(
-          'Duplicate Customer',
-          `A customer named "${trimmedName}" already exists in your directory.\n\nAddress: ${duplicateByName.address || 'N/A'}`
+          'Duplicate Customer Profile',
+          `A customer profile for "${trimmedName}" with this exact address and phone number already exists in your directory.`
         );
         return;
-      }
-
-      if (trimmedPhone) {
-        const duplicateByPhone = customers.find(
-          (c) => c.phone && c.phone.trim() === trimmedPhone
-        );
-        if (duplicateByPhone) {
-          showWarning(
-            'Duplicate Contact Number',
-            `Contact number "${trimmedPhone}" is already registered to "${duplicateByPhone.name}".`
-          );
-          return;
-        }
       }
     }
 

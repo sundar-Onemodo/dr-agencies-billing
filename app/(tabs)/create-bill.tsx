@@ -97,6 +97,7 @@ export default function CreateBillScreen() {
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerGstin, setCustomerGstin] = useState('');
   const [customerState, setCustomerState] = useState('Tamil Nadu');
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   const [billingDate, setBillingDate] = useState('');
   const [items, setItems] = useState<BillItem[]>([]);
   const [originalBillItems, setOriginalBillItems] = useState<BillItem[]>([]);
@@ -132,6 +133,7 @@ export default function CreateBillScreen() {
   // Helper to completely reset the form to a fresh "New Bill" state
   const resetToNewBill = useCallback(() => {
     setEditingBillId(null);
+    setSelectedCustomerId(null);
     setOriginalBillItems([]);
     setCustomerName('');
     setCustomerAddress('');
@@ -181,6 +183,7 @@ export default function CreateBillScreen() {
         setCustomerPhone(customerInfo.phone || '');
         setCustomerGstin(customerInfo.gstin || '');
         setCustomerState(customerInfo.state || 'Tamil Nadu');
+        setSelectedCustomerId(existing.customerId || null);
 
         if (existing.date) {
           try {
@@ -241,6 +244,7 @@ export default function CreateBillScreen() {
 
   const handleCancelEdit = () => {
     loadedBillIdRef.current = null;
+    setSelectedCustomerId(null);
     resetToNewBill();
   };
 
@@ -252,12 +256,26 @@ export default function CreateBillScreen() {
       )
     : [];
 
-  const exactCustomerMatch = customers.find(
+  // Check if current form matches an existing customer profile exactly (same name, address, and phone)
+  const exactCustomerProfileMatch = customers.find(
+    (c) =>
+      c.name.trim().toLowerCase() === customerName.trim().toLowerCase() &&
+      (c.address || '').trim().toLowerCase() === customerAddress.trim().toLowerCase() &&
+      (c.phone || '').trim() === customerPhone.trim()
+  );
+
+  // Existing customer profiles sharing the same name (e.g. multiple branch/shop locations)
+  const existingCustomersWithName = customers.filter(
     (c) => c.name.trim().toLowerCase() === customerName.trim().toLowerCase()
   );
-  const isNewCustomer = customerName.trim().length > 0 && !exactCustomerMatch;
+
+  const hasCustomerName = customerName.trim().length > 0;
+  // New profile if entered details don't match an already saved profile
+  const isNewCustomer = hasCustomerName && !exactCustomerProfileMatch;
+  const isNewBranch = hasCustomerName && existingCustomersWithName.length > 0 && !exactCustomerProfileMatch;
 
   const handleSelectCustomer = (c: Customer) => {
+    setSelectedCustomerId(c.id);
     setCustomerName(c.name);
     setCustomerAddress(c.address || '');
     setCustomerPhone(c.phone || '');
@@ -273,29 +291,30 @@ export default function CreateBillScreen() {
       return;
     }
 
-    if (exactCustomerMatch) {
-      showWarning('Notice', `Customer "${trimmedName}" is already in your directory.`);
+    if (exactCustomerProfileMatch) {
+      showWarning(
+        'Already Saved',
+        `This exact location profile for "${trimmedName}" is already in your Customer Directory.`
+      );
       return;
-    }
-
-    if (customerPhone.trim()) {
-      const dupPhone = customers.find((c) => c.phone && c.phone.trim() === customerPhone.trim());
-      if (dupPhone) {
-        showWarning('Duplicate Contact', `Contact number "${customerPhone.trim()}" is already saved for "${dupPhone.name}".`);
-        return;
-      }
     }
 
     try {
       setAddingCustomerToDir(true);
-      await addCustomer({
+      const newCust = await addCustomer({
         name: trimmedName,
         phone: customerPhone.trim(),
         address: customerAddress.trim(),
         gstin: customerGstin.trim().toUpperCase(),
         state: customerState.trim() || 'Tamil Nadu',
       });
-      showSuccess('Customer Saved', `"${trimmedName}" has been added to your Customer Directory!`, undefined, 'person-add');
+      if (newCust && newCust.id) {
+        setSelectedCustomerId(newCust.id);
+      }
+      const successMsg = isNewBranch
+        ? `New location/branch for "${trimmedName}" has been added to your Customer Directory!`
+        : `"${trimmedName}" has been added to your Customer Directory!`;
+      showSuccess('Customer Saved', successMsg, undefined, 'person-add');
     } catch (err: any) {
       showError('Error', err.message || 'Failed to save customer');
     } finally {
@@ -855,6 +874,7 @@ export default function CreateBillScreen() {
         gstin: customerGstin,
         state: customerState,
       }),
+      customerId: selectedCustomerId || undefined,
       date: billingDate,
       items,
       subtotal,
@@ -1418,8 +1438,10 @@ export default function CreateBillScreen() {
                     >
                       <View style={{ flex: 1 }}>
                         <Text style={styles.customerDropdownName}>{c.name}</Text>
-                        <Text style={styles.customerDropdownSub} numberOfLines={1}>
-                          {c.phone ? `📞 ${formatPhoneNumber(c.phone)}` : ''} {c.address ? `• 📍 ${c.address}` : ''}
+                        <Text style={styles.customerDropdownSub} numberOfLines={2}>
+                          {c.phone ? `📞 ${formatPhoneNumber(c.phone)}` : ''}
+                          {c.address ? `  •  📍 ${c.address}` : ''}
+                          {c.gstin ? `  •  🛡️ ${c.gstin}` : ''}
                         </Text>
                       </View>
                       <View style={styles.autoFillBadge}>
@@ -1480,7 +1502,7 @@ export default function CreateBillScreen() {
               </View>
             </View>
 
-            {/* Quick Add Button if New Customer */}
+            {/* Quick Add Button if New Customer or New Branch */}
             {isNewCustomer && (
               <TouchableOpacity
                 style={styles.quickAddCustomerBtn}
@@ -1494,7 +1516,11 @@ export default function CreateBillScreen() {
                   <Ionicons name="person-add-outline" size={16} color="#D4AF37" style={{ marginRight: 6 }} />
                 )}
                 <Text style={styles.quickAddCustomerText}>
-                  {addingCustomerToDir ? "Saving to Directory..." : `+ Save "${customerName}" to Directory`}
+                  {addingCustomerToDir
+                    ? "Saving to Directory..."
+                    : isNewBranch
+                    ? `+ Save as New Location for "${customerName}"`
+                    : `+ Save "${customerName}" to Directory`}
                 </Text>
               </TouchableOpacity>
             )}
